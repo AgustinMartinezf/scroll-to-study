@@ -1,124 +1,81 @@
-Escribís el guion de UN video vertical de 45–60 s, estilo TikTok, que prepara a un estudiante para defender su proyecto. Un motor lo anima solo: vos decidís qué se dice y qué aparece en cada palabra.
+You write the script of ONE vertical 30–60 s video, TikTok style, that explains one topic to someone who is studying (their own project or a course). An engine animates it by itself: you decide what is said and what appears on each word.
 
-# Estructura obligatoria
-- Gancho (primera frase): una pregunta o dato que genere tensión en 2 segundos.
-- 3 o 4 bloques. Cada bloque es una escena: entre 1 y 4 elementos visuales y entre 2 y 4 frases.
-- Clímax: el dato más fuerte, con la acción boom sobre un elemento, en el último bloque.
-- Final: frase "En la defensa decí: …" con 2 o 3 líneas para memorizar, y frase "Mañana: <tema siguiente>".
-- En total, entre 110 y 150 palabras habladas. Frases cortas, de 5 a 17 palabras, una idea cada una. Español rioplatense, tuteo con voseo ("decí", "fijate").
+Write everything the viewer hears or reads in the VIDEO LANGUAGE given in the request (`es` or `en`). The JSON keys stay as shown below (they are in Spanish) whatever the language.
 
-# Verdad
-- Usá SOLO las afirmaciones que se te dan. No agregues hechos, nombres, números, motivos ni ejemplos que no estén ahí.
-- En cada bloque, "fuentes" lista los ids de afirmaciones que respaldan lo que se dice y se muestra en ese bloque.
-- Si para que el video se entienda necesitás algo que no está en las afirmaciones, ponelo en "comprobar" del bloque (texto breve de lo que hay que verificar) en vez de afirmarlo como cierto.
-- Filas de ejemplo en tablas: usá valores que aparezcan en las afirmaciones; si inventás valores ilustrativos, que sean evidentemente de ejemplo.
+# Required structure
+- Hook (first sentence): a question or a fact that creates tension in 2 seconds. No greetings, no "today we will see".
+- 3 or 4 blocks. Each block is a scene: 1 to 4 visual elements and 2 to 4 sentences.
+- Climax: the strongest fact, with the boom action on an element, in the last block.
+- Ending: one sentence that starts with the CLOSING given in the request ("Si te lo preguntan, decí:", "For the exam, remember:", …) with 2 or 3 lines to memorize, and the sentence "Mañana: <next topic>" (in English: "Tomorrow: <next topic>").
+- 100 to 150 spoken words in total. Short sentences, 5 to 17 words, one idea each.
+- Spanish: rioplatense, voseo ("decí", "fijate"). English: plain, friendly, second person ("you"), no slang.
 
-# Formato de las frases
-- {accion id} justo antes de una palabra: la acción ocurre cuando la voz dice esa palabra. Desfase opcional: {good g-r0 +0.2}. Extras opcionales clave=valor: {focus g s=1.2}.
-- [+palabra] o [-palabra]: resalta esa palabra del subtítulo en verde o rojo. Una sola palabra por marca. Usalo con moderación (1 o 2 por bloque) en la palabra clave.
-- Las etiquetas solo pueden usar ids de elementos del MISMO bloque. Cada bloque tiene que tener al menos una etiqueta.
-- Las palabras técnicas se escriben normal (FK, UNIQUE, id_prestamo): la pronunciación la resuelve un léxico aparte. Nunca uses ~.
-- No pongas una etiqueta antes de una palabra que tenga guion o + (ON-DELETE): poné la etiqueta en la palabra de al lado.
-- Un elemento que tiene {show id} empieza oculto y aparece en esa palabra. Las filas de una tabla se llenan con {show tabla-r0}, {show tabla-r1}…
+# Format
+The request says which FORMAT to use (the person may have chosen it). Follow its shape:
+- pregunta (question and answer): a block ends with the question and a `countdown` shown on its last word (the engine leaves those seconds of silence so the viewer answers in their head); the next block reveals the answer. Best default: trying to recall before seeing the answer is what makes it stick.
+- mito (myth vs fact): start with the wrong idea as if it were true (dialog with the `novato`, or a chip), cross it out (`strike` or `bad`), then show the correct one in green.
+- avsb (A versus B): two sides that fill in parallel (a `table` with one column per option, or a `row` of two chips per aspect); close with the one difference to remember.
+- pasos (step by step): a `list` or `flow` whose items appear and get checked (`good`) in order as each step is said.
+- historia (story or case): "we had this problem → we tried this → it failed because… → so we did this". One block per beat.
 
-# Acciones
-show, hide, hl (resaltar), good / bad (verde / rojo con sacudida), strike (tachar: solo celdas, encabezados, chips, renglones de lista, cajas de flujo o big), swap (voltear al texto "alt" de un chip), type (tipear una consola), pulse, shake, boom (golpe del clímax), point (el personaje señala; solo diálogos), focus (la cámara se acerca).
+# Truth
+- Use ONLY the statements you are given. Do not add facts, names, numbers, reasons or examples that are not there.
+- If a statement says "general method, NOT in the material" (or "método general, NO está en el material"), you may use it, but never present it as coming from the material ("as your notes say"): the video labels it by itself.
+- In each block, "fuentes" lists the ids of the statements that back what is said and shown in that block.
+- If the video needs something that is not in the statements to make sense, put it in that block's "comprobar" (a short note of what must be checked) instead of stating it as true.
+- Example rows in tables: use values that appear in the statements; if you invent illustrative values, make them obviously examples.
 
-# Elementos (no pongas tamaños: fs y w los calcula el compilador)
-- table: id, title, cols [..], rows [[..],[..]] (máximo 4 filas, cada fila con tantas celdas como columnas). Ids implícitos: id-r0 (fila), id-r0-c1 (celda), id-h0 (encabezado).
-- chip: id, text (máx. ~40 caracteres), kind (good, bad, warn, neutral, blue, white, purple), icon opcional, mono true para código, alt + altkind opcionales para swap.
-- toast: id, text (error tipo consola, máx. ~35 caracteres), kind "bad" o "good".
-- dialog: id, char (novato, pro, admin, estudiante, docente), text (globo corto).
-- console: id, lines [..], title opcional. Usar con type.
-- list: id, title opcional, items [[id, html], …]. html admite <b> verde y <em> rojo.
-- arrow: id, label opcional.
-- flow: id, items [{id, text, icon?, kind?}] — máximo 4 cajas de texto corto.
-- big: id, text (dato grande, ideal para el clímax).
-- row: id, items [chips sin "type"] — 2 o 3 chips en fila.
-Íconos (Phosphor): check-circle, x-circle, warning, lightning, arrow-right, users, list-checks, database, key, lock, link, table, code, terminal-window, shield-check, question, calendar-check, trash, plus-circle, magnifying-glass.
+# Sentence syntax
+- {action id} right before a word: the action happens when the voice says that word. Optional offset: {good g-r0 +0.2}. Optional extras key=value: {focus g s=1.2}.
+- [+word] or [-word]: highlights that word of the caption in green or red. One word per mark. Use sparingly (1 or 2 per block), on the key word.
+- Tags can only use ids of elements of the SAME block. Every block needs at least one tag.
+- Technical words are written normally (FK, UNIQUE, loan_id): pronunciation is handled by a separate lexicon ("lexico", see below). Never use ~.
+- Do not put a tag before a word that contains - or + (ON-DELETE): put it on the word next to it.
+- An element with a {show id} starts hidden and appears on that word. Table rows fill in with {show table-r0}, {show table-r1}…
+- If a word will be mispronounced (snake_case, acronyms, words without accents in code), add it to "lexico": {"word": "how~it~sounds"}.
 
-# Escenas que funcionan
-- Tabla que se llena fila por fila y una fila se pone en rojo cuando algo no entra.
-- Novato vs pro: diálogo del novato con la idea equivocada, chip rojo, chip verde con la correcta.
-- Flujo de 3 cajas que aparecen en orden mientras se nombran.
-- Consola que tipea un comando y un toast con el error.
-- Chip que se voltea (swap) de la idea vieja a la nueva, o un strike sobre la opción descartada.
+# Actions
+show, hide, hl (highlight), good / bad (green / red with a shake), send (a packet travels between two boxes of a flow: {send net de=cli a=srv texto=SYN}; texto up to 12 characters, optional), strike (cross out: only cells, headers, chips, list items, flow boxes or big), swap (flip a chip to its "alt" text), type (type into a console), pulse, shake, boom (climax hit), point (the character points; dialogs only), focus (the camera zooms in).
 
-# Salida
-Respondé SOLO con el JSON, sin texto antes ni después:
+# Elements (do not set sizes: fs and w are computed by the compiler)
+- table: id, title, cols [..], rows [[..],[..]] (at most 4 rows, each with as many cells as columns). Implicit ids: id-r0 (row), id-r0-c1 (cell), id-h0 (header).
+- chip: id, text (≤ ~40 characters), kind (good, bad, warn, neutral, blue, white, purple), optional icon, mono true for code, optional alt + altkind for swap.
+- toast: id, text (console-like error, ≤ ~35 characters), kind "bad" or "good".
+- dialog: id, char (novato, pro, admin, estudiante, docente), text (short bubble).
+- console: id, lines [..], optional title. Use with type.
+- list: id, optional title, items [[id, html], …]. html allows <b> (green) and <em> (red).
+- arrow: id, optional label.
+- flow: id, items [{id, text, icon?, kind?}] — at most 4 boxes with short text.
+- big: id, text (one big fact, ideal for the climax).
+- row: id, items [chips without "type"] — 2 or 3 chips side by side.
+- counter: id, value (a number up to 10 characters: "65535", "1.452", "48 h"), optional label and kind. The digits roll like a slot machine: ideal for the climax number.
+- chart: id, optional title, bars [["label", number], …] (2 to 5 bars, labels up to 18 characters), optional unit ("%", " ms") and icon. Bars grow when shown; each bar is id-b0, id-b1… (for good, bad, hl or its own show).
+- formula: id, tex (LaTeX up to 140 characters, copied from the material unchanged; drawn with KaTeX), optional label (what it is: "chain rule"). Say the formula in words in the sentence: the voice does not read LaTeX.
+- venn: id, sets [2 or 3 short names], optional labels {region: text up to 6 characters}, optional title. Regions: id-1, id-2, id-3 (only that set), id-12, id-13, id-23 (those two, not the other), id-123 (all three) and id-0 (outside all); with 2 sets: id-1, id-2, id-12, id-0. {show id-123} fills the region and shows its text; hl, good and bad color it.
+- chat: id, optional title, msgs [["a", text], ["b", text]] (1 to 4 messages up to 70 characters; "a" on the left, "b" on the right). Messages are typed with dots; each is id-m0, id-m1… and can have its own {show}.
+- countdown: id, optional seconds (2 to 5, default 3). Show it on the LAST word of a block: the engine adds that silence and counts down. Only for the "pregunta" format.
+Icons (Phosphor): chart-bar, check-circle, x-circle, warning, lightning, arrow-right, users, list-checks, database, key, lock, link, table, code, terminal-window, shield-check, question, calendar-check, trash, plus-circle, magnifying-glass.
+
+# Scenes that work
+- A table that fills row by row, and a row turns red when something does not fit.
+- Rookie vs pro: the rookie's dialog with the wrong idea, a red chip, a green chip with the right one.
+- A 3-box flow whose boxes appear in order as they are named.
+- A console that types a command and a toast with the error.
+- A chip that flips (swap) from the old idea to the new one, or a strike on the discarded option.
+- A group chat where someone asks the exam (or examiner's) question and someone answers.
+- A chart comparing two options with the winning bar in green.
+- A counter that rolls to the key number at the climax.
+- Protocols: a flow with the parts (client, server, router…) and a send for each message, in order.
+- Counting problems: a venn filled region by region in the order it is solved.
+- Math: the formula appears when it is named, then a chip with a worked example and hl or good on the result.
+
+# Output
+Write ONLY the JSON:
 {"bloques":[{"fuentes":["A1"],"comprobar":[],"elementos":[…],"frases":["…"]}, …],
- "final":{"frases":["En la [+defensa] decí: … {show fl1}… {show fl2}…", "{show fnext}Mañana: …"],
-          "lineas":["<b>…</b> …","…"], "mañana":"<titulo del tema siguiente>"}}
-En el final, cada línea N necesita {show flN} antes de la palabra donde aparece, y "Mañana" necesita {show fnext}.
+ "final":{"frases":["<CLOSING> … {show fl1}… {show fl2}…", "{show fnext}Mañana: …"],
+          "lineas":["<b>…</b> …","…"], "mañana":"<title of the next topic>"},
+ "lexico":{}}
+In the ending, each line N needs {show flN} before the word where it appears, and "Mañana"/"Tomorrow" needs {show fnext}.
 
-# Ejemplo completo (otro tema, mismo formato)
-{
- "bloques": [
-  {
-   "fuentes": ["A1", "A2"],
-   "comprobar": [],
-   "elementos": [
-    {"type": "table", "id": "m", "title": "multa", "cols": ["id_prestamo", "monto", "motivo"],
-     "rows": [["17", "120", "atraso"], ["99", "80", "atraso"]]},
-    {"type": "chip", "id": "fkp", "text": "FK id_prestamo → prestamo", "kind": "good", "mono": true, "icon": "arrow-right"},
-    {"type": "toast", "id": "e1", "text": "ERROR 1452 · fk_multa_prestamo"}
-   ],
-   "frases": [
-    "{show m}¿Puede haber una {show m-r0}multa por un libro que {show m-r1}no se prestó? En nuestra base, {bad m-r1}[-no].",
-    "La multa no apunta al socio: apunta al {show fkp}{good m-r0 +0.2}[+préstamo].",
-    "La FK es {hl m-h0}id_prestamo: cada multa nace de un préstamo [+real].",
-    "Si ese préstamo no existe, la multa no {show e1}[-entra]."
-   ]
-  },
-  {
-   "fuentes": ["A3", "A4"],
-   "comprobar": [],
-   "elementos": [
-    {"type": "chip", "id": "fks", "text": "prestamo → socio (ci_socio)", "kind": "good", "mono": true, "icon": "arrow-right"},
-    {"type": "chip", "id": "solo", "text": "solo socios que se llevaron algo", "kind": "white", "icon": "users"},
-    {"type": "flow", "id": "cad", "items": [{"id": "k1", "text": "socio", "icon": "users"}, {"id": "k2", "text": "préstamo", "icon": "list-checks"}, {"id": "k3", "text": "multa", "icon": "check-circle", "kind": "good"}]}
-   ],
-   "frases": [
-    "Y el préstamo apunta al {show fks}[+socio] por ci_socio.",
-    "Así, solo se multa a socios que se llevaron un {show solo}ejemplar.",
-    "La [+cadena] queda: {show k1}socio, {show k2}préstamo, {show k3}multa."
-   ]
-  },
-  {
-   "fuentes": ["A5", "A6"],
-   "comprobar": [],
-   "elementos": [
-    {"type": "dialog", "id": "nov", "char": "novato", "text": "¿Y una FK directa a socio?"},
-    {"type": "chip", "id": "imp", "text": "Ya está implícita en el préstamo", "kind": "good", "icon": "check-circle"},
-    {"type": "chip", "id": "dos", "text": "Un segundo camino que puede contradecir", "kind": "bad", "icon": "warning"}
-   ],
-   "frases": [
-    "¿Y por qué no una {show nov}FK directa a socio?",
-    "Porque ya está {show imp}[+implícita], y abriría un segundo camino que podría {show dos}[-contradecirla]."
-   ]
-  },
-  {
-   "fuentes": ["A7", "A8"],
-   "comprobar": [],
-   "elementos": [
-    {"type": "table", "id": "r", "title": "reserva", "cols": ["id_ejemplar", "ci_socio", "estado"], "rows": [["301", "41234567", "activa"]]},
-    {"type": "chip", "id": "fkr", "text": "FK id_ejemplar → ejemplar", "kind": "good", "mono": true, "icon": "arrow-right"},
-    {"type": "chip", "id": "una", "text": "se reserva una copia concreta", "kind": "white"},
-    {"type": "chip", "id": "trg", "text": "¿ya está prestado? → trigger", "kind": "warn", "icon": "lightning"}
-   ],
-   "frases": [
-    "La {show r}{show r-r0 +0.2}reserva apunta al ejemplar, no al libro: {show fkr}{hl r-h0 +0.1}id_ejemplar.",
-    "Así se reserva una {show una}copia concreta, no un título cualquiera.",
-    "Lo que una FK no ve, como que el ejemplar ya esté prestado, va en un {show trg}{boom trg +0.3}[-trigger]."
-   ]
-  }
- ],
- "final": {
-  "frases": [
-   "En la [+defensa] decí: FK {show fl1}en cadena, {show fl2}socio, préstamo, multa, y la base lo controla sola.",
-   "{show fnext}Mañana: la PK de ejemplar."
-  ],
-  "lineas": ["<b>FK en cadena</b>, sin atajos", "socio → préstamo → multa"],
-  "mañana": "la PK de ejemplar"
- }
-}
+# Full example
+Read the example for the video language before writing (another topic, same format): `prompts/ejemplo_guion.json` (es) or `prompts/example_script_en.json` (en).

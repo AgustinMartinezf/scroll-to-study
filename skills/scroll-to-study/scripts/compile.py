@@ -31,8 +31,8 @@ def norm(w: str) -> str:
 
 
 ACCIONES = {"show", "hide", "hl", "good", "bad", "strike", "swap", "type",
-            "pulse", "shake", "boom", "point", "focus"}
-EXTRAS_VALIDOS = {"from", "rot", "until", "bg", "color", "dur", "s", "dy"}
+            "pulse", "shake", "boom", "point", "focus", "send"}
+EXTRAS_VALIDOS = {"from", "rot", "until", "bg", "color", "dur", "s", "dy", "de", "a", "texto"}
 KINDS = {"good", "bad", "warn", "neutral", "blue", "white", "purple"}
 ROLES = {"novato", "pro", "estudiante", "admin", "docente"}
 IDS_FINAL = {"fcard", "fpro", "fnext"}
@@ -50,6 +50,12 @@ TIPOS: dict[str, tuple[set[str], set[str]]] = {
     "big":     ({"id", "text"}, {"color"}),
     "row":     ({"id", "items"}, set()),
     "spacer":  ({"id"}, {"h"}),
+    "counter": ({"id", "value"}, {"label", "kind"}),
+    "chart":   ({"id", "bars"}, {"title", "unit", "icon"}),
+    "chat":    ({"id", "msgs"}, {"title"}),
+    "formula": ({"id", "tex"}, {"label"}),
+    "venn":    ({"id", "sets"}, {"labels", "title"}),
+    "countdown": ({"id"}, {"seconds"}),
 }
 COMUNES = {"type", "gap", "align"}
 LAYOUT_DEL_COMPILADOR = {"fs", "w"}   # si el LLM los pone, se ignoran
@@ -57,8 +63,9 @@ LAYOUT_DEL_COMPILADOR = {"fs", "w"}   # si el LLM los pone, se ignoran
 # Ancho útil de una estación (el motor centra en x±490; dejo margen)
 ANCHO_MAX = 960
 FS_MIN = 28
-RITMO = 2.5          # palabras por segundo estimadas antes de generar la voz
+RITMO = 6.15         # sílabas por segundo de Piper davefx a velocidad 1.1 (medido en 59 frases)
 PAUSA_BLOQUE = 0.4   # GAPS al final de cada bloque
+PAUSA_TARDIA = 1.0   # ... si lo último que aparece cae en las últimas palabras
 PAUSA_FRASE = 0.22   # voice.py: GAP por defecto
 
 
@@ -241,6 +248,9 @@ class Ids:
     todos: set[str] = field(default_factory=set)
     con_tachado: set[str] = field(default_factory=set)   # tienen .sk adentro
     con_alt: set[str] = field(default_factory=set)
+    barras: set[str] = field(default_factory=set)
+    flujos: dict[str, list[str]] = field(default_factory=dict)   # id del flow -> ids de sus cajas
+    cuentas: dict[str, int] = field(default_factory=dict)        # id de countdown -> segundos
     consolas: set[str] = field(default_factory=set)
     dialogos: set[str] = field(default_factory=set)
 
@@ -329,6 +339,7 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
                 iconos.add(it[2])
     elif tipo == "flow":
         iconos.add("arrow-right")
+        ids.flujos[e["id"]] = [it["id"] for it in e["items"]]
         ancho = 0
         for it in e["items"]:
             nuevo_id(it["id"])
@@ -342,6 +353,70 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
             rep.aviso(donde, f"el flujo mide ~{ancho - 76}px y no entra en 980; acortá textos o usá menos cajas")
     elif tipo == "big":
         ids.con_tachado.add(e["id"])
+    elif tipo == "counter":
+        v = str(e["value"])
+        if not re.search(r"\d", v) or len(v) > 10:
+            rep.error(donde, f"value «{v}»: tiene que ser un número de hasta 10 caracteres (puede llevar . , % o unidad)")
+        if len(e.get("label", "")) > 40:
+            rep.error(donde, "label de más de 40 caracteres")
+        if e.get("kind", "white") not in KINDS:
+            rep.error(donde, f"kind «{e['kind']}» no existe")
+        ids.con_tachado.add(e["id"])
+    elif tipo == "chart":
+        iconos.add(e.get("icon", "chart-bar"))
+        barras = e["bars"]
+        if not 2 <= len(barras) <= 5:
+            rep.error(donde, "un chart lleva entre 2 y 5 barras")
+            return None
+        for i, b in enumerate(barras):
+            if not (isinstance(b, (list, tuple)) and len(b) == 2 and isinstance(b[1], (int, float)) and b[1] >= 0):
+                rep.error(donde, f"la barra {i} tiene que ser [\"etiqueta\", número >= 0]")
+                return None
+            if len(str(b[0])) > 18:
+                rep.error(donde, f"la etiqueta de la barra {i} pasa de 18 caracteres")
+            nuevo_id(f"{e['id']}-b{i}")
+            ids.barras.add(f"{e['id']}-b{i}")
+    elif tipo == "venn":
+        sets = e["sets"]
+        if len(sets) not in (2, 3) or any(not isinstance(x, str) or not 1 <= len(x) <= 12 for x in sets):
+            rep.error(donde, "sets: 2 o 3 nombres de hasta 12 caracteres")
+            return None
+        regiones = ["1", "2", "12", "0"] if len(sets) == 2 else ["1", "2", "3", "12", "13", "23", "123", "0"]
+        for r in regiones:
+            nuevo_id(f"{e['id']}-{r}")
+        for r, txt in (e.get("labels") or {}).items():
+            if r not in regiones:
+                rep.error(donde, f"labels: la región «{r}» no existe (hay {', '.join(regiones)})")
+            elif len(str(txt)) > 6:
+                rep.error(donde, f"labels: «{txt}» pasa de 6 caracteres")
+    elif tipo == "countdown":
+        seg = e.get("seconds", 3)
+        if not isinstance(seg, int) or not 2 <= seg <= 5:
+            rep.error(donde, "seconds tiene que ser un entero de 2 a 5")
+        ids.cuentas[e["id"]] = seg if isinstance(seg, int) else 3
+    elif tipo == "formula":
+        tex = e["tex"]
+        if not tex.strip() or len(tex) > 140:
+            rep.error(donde, "tex vacío o de más de 140 caracteres: partí la fórmula en dos")
+        if re.search(r"\\(href|url|includegraphics|html\w*)\b", tex):
+            rep.error(donde, "la fórmula usa un comando que no se permite (\\href, \\url, \\html…)")
+        if tex.count("{") != tex.count("}"):
+            rep.error(donde, "llaves { } desbalanceadas en la fórmula")
+        if len(e.get("label", "")) > 50:
+            rep.error(donde, "label de más de 50 caracteres")
+        ids.con_tachado.add(e["id"])
+    elif tipo == "chat":
+        msgs = e["msgs"]
+        if not 1 <= len(msgs) <= 4:
+            rep.error(donde, "un chat lleva entre 1 y 4 mensajes")
+            return None
+        for i, m in enumerate(msgs):
+            if not (isinstance(m, (list, tuple)) and len(m) == 2 and m[0] in ("a", "b")):
+                rep.error(donde, f"el mensaje {i} tiene que ser [\"a\"|\"b\", texto]")
+                return None
+            if len(m[1]) > 70:
+                rep.error(donde, f"el mensaje {i} pasa de 70 caracteres")
+            nuevo_id(f"{e['id']}-m{i}")
     elif tipo == "row":
         n = len(e["items"])
         maxw = (ANCHO_MAX - 24 * (n - 1)) / max(1, n)
@@ -367,7 +442,7 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
 # ---------------------------------------------------------------------------
 
 def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None = None,
-             inventario: dict[str, Any] | None = None) -> tuple[dict[str, Any], Reporte]:
+             inventario: dict[str, Any] | None = None, ritmo: float = RITMO) -> tuple[dict[str, Any], Reporte]:
     """inventario: si se pasa, cada fuente tiene que ser una afirmación verificada (estado ok)
     y se avisa de identificadores o números que no aparecen en las fuentes del bloque."""
     rep = Reporte()
@@ -411,7 +486,7 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
     lineas = final.get("lineas", [])
     ids_lineas = {f"fl{i + 1}" for i in range(len(lineas))}
     if not lineas:
-        rep.error("final", "no tiene líneas «En la defensa»")
+        rep.error("final", "no tiene «lineas» para memorizar")
     if not final.get("mañana"):
         rep.error("final", "falta «mañana»")
 
@@ -429,10 +504,12 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
             rep.error(f"bloque {b}", "no tiene frases")
         validos = (IDS_FINAL | ids_lineas) if b == "final" else ids_bloque[b]  # type: ignore[index]
         eventos_bloque = 0
+        frases_bloque = []
         for texto in frases:
             i = len(phrases)
             donde = f"frase {i}"
             fr = parsear_frase(texto, donde, rep)
+            frases_bloque.append(fr)
             cap = " ".join(fr.palabras)
             tts = " ".join(pronunciar(p, lex, donde, rep) for p in fr.palabras)
             phrases.append([cap, None if tts == cap else tts])
@@ -456,19 +533,35 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
             if eventos_bloque == 0:
                 rep.error(f"bloque {b}", "ninguna frase anima sus elementos (el motor falla al calcular el viaje)")
             if phrases:
-                gaps[len(phrases) - 1] = bloques[b].get("pausa", PAUSA_BLOQUE)  # type: ignore[index]
+                # si algo aparece en las últimas palabras del bloque, una pausa más larga deja verlo
+                # antes de que la cámara viaje a la escena siguiente
+                ultimo = max((idx for idx, et in fr.etiquetas if et.accion == "show"), default=-1)
+                tardio = ultimo >= 0 and len(fr.palabras) - 1 - ultimo <= 2
+                pausa = bloques[b].get("pausa", PAUSA_TARDIA if tardio else PAUSA_BLOQUE)  # type: ignore[index]
+                # una cuenta regresiva deja ese silencio para pensar la respuesta
+                cuentas = [ids.cuentas[et.id] for _, et in fr.etiquetas if et.accion == "show" and et.id in ids.cuentas]
+                if cuentas:
+                    pausa = max(pausa, cuentas[0] + 0.4)
+                for k, frase_previa in enumerate(frases_bloque[:-1]):
+                    if any(et.accion == "show" and et.id in ids.cuentas for _, et in frase_previa.etiquetas):
+                        rep.error(f"bloque {b}", "la cuenta regresiva va en la última frase del bloque (el silencio va ahí)")
+                gaps[len(phrases) - 1] = pausa
 
     for lid in sorted(ids_lineas):
         if lid not in anclas_final:
-            rep.error("final", f"la línea {lid} nunca aparece: poné {{show {lid}}} en la frase de la defensa")
+            rep.error("final", f"la línea {lid} nunca aparece: poné {{show {lid}}} en la frase de cierre")
     if "fnext" not in anclas_final:
         rep.error("final", "falta {show fnext} antes de la palabra «Mañana»")
     if not hay_boom:
         rep.aviso("guion", "no hay clímax marcado (ninguna acción boom)")
 
-    dur = total_palabras / RITMO + sum(gaps.values()) + PAUSA_FRASE * (len(phrases) - len(gaps))
-    if not 40 <= dur <= 65:
-        rep.aviso("guion", f"duración estimada {dur:.0f}s ({total_palabras} palabras), fuera de 45–60s")
+    silabas = sum(len(re.findall(r"[aeiouyáéíóúü]+", w.lower())) or 1
+                  for cap, tts in phrases for w in (tts or cap).replace("~", " ").split())
+    dur = 0.15 + silabas / ritmo + sum(gaps.values()) + PAUSA_FRASE * (len(phrases) - len(gaps) - 1) + 1.4
+    if not 30 <= dur <= 62:            # 30–45 s también sirven (validado con Redes y Conjuntos)
+        corto = dur < 30
+        rep.aviso("guion", f"duración estimada {dur:.0f}s ({total_palabras} palabras), fuera de 30–60s: "
+                           + ("agregá una o dos frases" if corto else "sacá alguna frase"))
 
     if dir_iconos:
         for ic in sorted(iconos):
@@ -486,13 +579,18 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
         "EVENTS": events,
         "FINAL": {
             "start": f"{primera_final}:^",
+            "title": final.get("titulo", "PARA EXPLICARLO"),
             "say": final.get("decilo", "Decilo así"),
             "next": final.get("mañana", ""),
+            "next_label": final.get("etiqueta_manana", "Mañana: " + final.get("mañana", "")),
             "next_at": anclas_final.get("fnext", f"{primera_final}:^"),
             "lines": [[f"fl{i + 1}", h, anclas_final.get(f"fl{i + 1}", f"{primera_final}:^")]
                       for i, h in enumerate(lineas)],
         },
+        "IDIOMA": guion.get("idioma", "es"),
         "FUENTES": [b.get("fuentes", []) for b in bloques],
+        # bloques que usan métodos generales (no salen del material): el motor les pone una etiqueta
+        "GENERAL": [any(afirm.get(f, {}).get("estado") == "general" for f in b.get("fuentes", [])) for b in bloques],
         "DURACION_ESTIMADA": round(dur, 1),
     }
     return spec, rep
@@ -505,7 +603,7 @@ def chequear_fuentes(b: int, bloque: dict[str, Any], afirm: dict[str, Any], rep:
         a = afirm.get(f)
         if a is None:
             rep.error(f"bloque {b}", f"la fuente «{f}» no está en el inventario")
-        elif a.get("estado") != "ok":
+        elif a.get("estado") not in ("ok", "general"):
             rep.error(f"bloque {b}", f"{f} está para comprobar: {'; '.join(a.get('motivos', [])) or 'sin verificar'}")
         else:
             respaldo += " " + a["texto"] + " " + a.get("cita", "")
@@ -513,7 +611,8 @@ def chequear_fuentes(b: int, bloque: dict[str, Any], afirm: dict[str, Any], rep:
         return
     visible = " ".join(TOKEN.sub(lambda m: m.group(4) or " ", f) for f in bloque.get("frases", []))
     visible += " " + json.dumps(bloque.get("elementos", []), ensure_ascii=False)
-    visible = re.sub(r'"(type|id|kind|icon|char|altkind|title|cols|rows|items|text|lines|label|alt|mono)"', " ", visible)
+    visible = re.sub(r'"(type|id|kind|icon|char|altkind|title|cols|rows|items|text|lines|label|alt|mono|labels|sets)"', " ", visible)
+    visible = re.sub(r'"\d+":', " ", visible)          # códigos de región de un venn ("123": …)
     sueltos = sorted(i for i in identificadores(visible)
                      if i.lower() not in respaldo.lower() and not re.fullmatch(r"[a-z]+-r\d+(-c\d+)?|[a-z]+-h\d+", i))
     if sueltos:
@@ -527,6 +626,17 @@ def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
         "type": (ids.consolas, "solo consolas"),
         "point": (ids.dialogos, "solo diálogos"),
     }
+    if et.accion == "send":
+        cajas = ids.flujos.get(et.id)
+        if cajas is None:
+            rep.error(donde, f"send sobre «{et.id}»: solo flujos (flow)")
+            return
+        de, a = et.extra.get("de", cajas[0]), et.extra.get("a", cajas[-1])
+        if de not in cajas or a not in cajas or de == a:
+            rep.error(donde, f"send: de={de} a={a} tienen que ser dos cajas distintas de «{et.id}» ({', '.join(cajas)})")
+        if len(str(et.extra.get("texto", ""))) > 12:
+            rep.error(donde, "send: texto de más de 12 caracteres")
+        return
     if et.accion in requisitos:
         validos, msg = requisitos[et.accion]
         if et.id not in validos:

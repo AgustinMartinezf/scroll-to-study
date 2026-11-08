@@ -1,0 +1,70 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1", "A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "table", "id": "m", "title": "fine", "cols": ["loan_id", "amount", "reason"],
+     "rows": [["17", "120", "late"], ["99", "80", "late"]]},
+    {"type": "chip", "id": "fkp", "text": "FK loan_id → loan", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "toast", "id": "e1", "text": "ERROR 1452 · fk_fine_loan"}
+   ],
+   "frases": [
+    "{show m}Can there be a {show m-r0}fine for a book that was {show m-r1}not lent? In our database, {bad m-r1}[-no].",
+    "The fine does not point to the member: it points to the {show fkp}{good m-r0 +0.2}[+loan].",
+    "The FK is {hl m-h0}loan_id: every fine comes from a [+real] loan.",
+    "If that loan does not exist, the fine does not {show e1}[-go] in."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "chip", "id": "fks", "text": "loan → member (member_id)", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "chip", "id": "solo", "text": "only members who took something", "kind": "white", "icon": "users"},
+    {"type": "flow", "id": "cad", "items": [{"id": "k1", "text": "member", "icon": "users"}, {"id": "k2", "text": "loan", "icon": "list-checks"}, {"id": "k3", "text": "fine", "icon": "check-circle", "kind": "good"}]}
+   ],
+   "frases": [
+    "And the loan points to the {show fks}[+member] through member_id.",
+    "So only members who took a {show solo}copy can be fined.",
+    "The [+chain] is: {show k1}member, {show k2}loan, {show k3}fine."
+   ]
+  },
+  {
+   "fuentes": ["A5", "A6"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "dialog", "id": "nov", "char": "novato", "text": "Why not an FK straight to member?"},
+    {"type": "chip", "id": "imp", "text": "It is already implied by the loan", "kind": "good", "icon": "check-circle"},
+    {"type": "chip", "id": "dos", "text": "A second path that can contradict it", "kind": "bad", "icon": "warning"}
+   ],
+   "frases": [
+    "So why not an {show nov}FK straight to member?",
+    "Because it is already {show imp}[+implied], and it would open a second path that could {show dos}[-contradict] it."
+   ]
+  },
+  {
+   "fuentes": ["A7", "A8"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "table", "id": "r", "title": "reservation", "cols": ["copy_id", "member_id", "status"], "rows": [["301", "41234567", "active"]]},
+    {"type": "chip", "id": "fkr", "text": "FK copy_id → copy", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "chip", "id": "una", "text": "you reserve one specific copy", "kind": "white"},
+    {"type": "chip", "id": "trg", "text": "already lent? → trigger", "kind": "warn", "icon": "lightning"}
+   ],
+   "frases": [
+    "A {show r}{show r-r0 +0.2}reservation points to the copy, not the book: {show fkr}{hl r-h0 +0.1}copy_id.",
+    "So you reserve one {show una}specific copy, not just any title.",
+    "What an FK cannot see, like a copy that is already lent, goes in a {show trg}{boom trg +0.3}[-trigger]."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "If they ask you, [+say]: FKs {show fl1}in a chain, {show fl2}member, loan, fine, and the database checks it by itself.",
+   "{show fnext}Tomorrow: the PK of a copy."
+  ],
+  "lineas": ["<b>FKs in a chain</b>, no shortcuts", "member → loan → fine"],
+  "mañana": "the PK of a copy"
+ }
+}

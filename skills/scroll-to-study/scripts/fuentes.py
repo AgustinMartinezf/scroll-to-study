@@ -132,8 +132,15 @@ def _aparece(ident: str, texto_norm: str) -> bool:
 
 
 def verificar(inventario: dict[str, Any], corpus: Corpus) -> dict[str, Any]:
-    """Agrega estado ('ok' | 'comprobar') y motivos a cada afirmación. No borra nada."""
+    """Agrega estado ('ok' | 'comprobar' | 'general') y motivos a cada afirmación. No borra nada.
+
+    'general': métodos y trampas que no están en el material (origen "general"). Solo valen si
+    anclan a un tipo de ejercicio que sí está en el material (campo "para"), y el video los marca.
+    """
+    generales = [a for a in inventario["afirmaciones"] if a.get("origen") == "general"]
     for a in inventario["afirmaciones"]:
+        if a.get("origen") == "general":
+            continue
         motivos: list[str] = []
         frag, err = corpus.fragmento(a["fuente"])
         cita = _norm(a.get("cita", ""))
@@ -152,5 +159,19 @@ def verificar(inventario: dict[str, Any], corpus: Corpus) -> dict[str, Any]:
                 motivos.append(f"no aparecen en la fuente: {', '.join(faltan)}")
         # "aprobado": true lo pone una persona después de revisar; los motivos quedan a la vista
         a["estado"] = "ok" if not motivos or a.get("aprobado") is True else "comprobar"
+        a["motivos"] = motivos
+    estado = {a["id"]: a for a in inventario["afirmaciones"]}
+    for a in generales:
+        motivos = []
+        if a.get("tipo") not in ("metodo", "trampa"):
+            motivos.append("lo que no sale del material solo puede ser un método o una trampa (tipo metodo|trampa)")
+        para = a.get("para") or []
+        if not para:
+            motivos.append("falta «para»: los ids de los ejercicios del material a los que se aplica")
+        for p in para:
+            e = estado.get(p)
+            if e is None or e.get("origen") == "general" or e.get("estado") != "ok" or e.get("tipo") != "ejercicio":
+                motivos.append(f"«para» tiene que apuntar a ejercicios verificados del material; {p} no lo es")
+        a["estado"] = "general" if not motivos else "comprobar"
         a["motivos"] = motivos
     return inventario

@@ -61,7 +61,7 @@
  ],
  "final": {
   "frases": [
-   "En la [+defensa] decí: FK {show fl1}en cadena, {show fl2}socio, préstamo, multa, y la base lo controla sola.",
+   "Si te lo preguntan, [+decí]: FK {show fl1}en cadena, {show fl2}socio, préstamo, multa, y la base lo controla sola.",
    "{show fnext}Mañana: la PK de ejemplar."
   ],
   "lineas": ["<b>FK en cadena</b>, sin atajos", "socio → préstamo → multa"],

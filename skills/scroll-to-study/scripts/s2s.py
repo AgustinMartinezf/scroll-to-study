@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""scroll to study: del material de un proyecto a videos cortos para preparar la defensa.
+"""scroll to study: del material de estudio (un proyecto o una materia) a videos cortos para repasar.
 
 Claude escribe los JSON (inventario, temas, guiones); este script comprueba todo lo que se puede
 comprobar con código y fabrica los videos:
 
   python3 s2s.py instalar                       # una vez: voz (Piper) y gsap a la carpeta de datos
-  python3 s2s.py corpus    -t T --repo RUTA|repo.zip [--doc informe.pdf ...]  -> T/corpus.txt
+  python3 s2s.py corpus    -t T [--modo proyecto|materia] --repo RUTA|repo.zip [--doc apunte.pdf ...]
   python3 s2s.py verificar -t T                 # verifica T/inventario.json contra el material
   python3 s2s.py temas     -t T                 # filtra T/temas.json (solo afirmaciones verificadas)
   python3 s2s.py pedido    -t T --tema t01      # el pedido del guion: el tema y SOLO sus afirmaciones
@@ -37,19 +37,24 @@ sys.path.insert(0, str(AQUI))
 import fuentes                                      # noqa: E402
 from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
-from etapas import (escribir, escribir_salidas, filtrar_temas, leer, pedido_guion,  # noqa: E402
-                    resumen_inventario, separar_errores)
+from etapas import (IDIOMAS, MODOS, escribir, escribir_salidas, filtrar_temas, idioma_de, leer, modo_de,  # noqa: E402
+                    textos,
+                    pedido_guion, resumen_inventario, separar_errores)
 
 ICONOS = AQUI / "iconos"          # solo los íconos permitidos (y que existen en el motor)
-LEXICO = AQUI / "lexico.json"
 MAX_INTENTOS = 3
 
 DESCARGAS = {
     "gsap": {"url": "https://registry.npmjs.org/gsap/-/gsap-3.12.5.tgz",
              "sha256": "134ab4f04f6d98d5fd55f89b6f07726a3b9660c483d4ca31acc0efec62fd5236"},
+    "katex": {"url": "https://registry.npmjs.org/katex/-/katex-0.16.11.tgz",
+              "sha256": "8c5494c5f7d8e8bf73ff3fe64d4bd09a340e4878b7eec9bbd9ef8d8f3e24193f"},
     "davefx": {"url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/"
                       "vits-piper-es_ES-davefx-medium.tar.bz2",
                "sha256": "a3f6beb54a9cb893279f72978a22f807a4d9fc9c7848157b524d5cc7b7f58b22"},
+    "hfc_male": {"url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/"
+                        "vits-piper-en_US-hfc_male-medium.tar.bz2",
+                 "sha256": "76388f84acfca8ba5c0ed1636a26ada14c598abd52e76f110d4756fe326fc5f2"},
 }
 
 
@@ -85,7 +90,7 @@ def _extraer_seguro(tar: tarfile.TarFile, destino: Path) -> None:
 
 def cmd_instalar(a: argparse.Namespace) -> int:
     problemas = []
-    for mod, pip in (("numpy", "numpy"), ("soundfile", "soundfile"), ("piper", "piper-tts")):
+    for mod, pip in (("numpy", "numpy"), ("soundfile", "soundfile"), ("piper", "piper-tts"), ("onnx", "onnx")):
         try:
             __import__(mod)
         except ImportError:
@@ -103,15 +108,28 @@ def cmd_instalar(a: argparse.Namespace) -> int:
     if not gsap.exists():
         with tarfile.open(fileobj=io.BytesIO(_bajar("gsap")), mode="r:gz") as tar:
             gsap.write_bytes(tar.extractfile("package/dist/gsap.min.js").read())
-    for voz, modelo in CFG["voces"].items():
-        if not Path(modelo).exists() and voz in DESCARGAS:
-            with tarfile.open(fileobj=io.BytesIO(_bajar(voz)), mode="r:bz2") as tar:
-                _extraer_seguro(tar, DATOS / "voces")
+    katex = Path(CFG["katex"])
+    if not (katex / "katex.min.js").exists():
+        katex.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(fileobj=io.BytesIO(_bajar("katex")), mode="r:gz") as tar:
+            for m in tar.getmembers():
+                n = m.name
+                if m.isfile() and (n in ("package/dist/katex.min.js", "package/dist/katex.min.css")
+                                   or (n.startswith("package/dist/fonts/") and n.endswith(".woff2"))):
+                    destino = katex / ("fonts" if "/fonts/" in n else "") / Path(n).name
+                    destino.parent.mkdir(parents=True, exist_ok=True)
+                    destino.write_bytes(tar.extractfile(m).read())
+    voz = IDIOMAS[a.idioma]["voz"]                 # solo la voz del idioma pedido (~65 MB cada una)
+    modelo = Path(CFG["voces"][voz])
+    if not modelo.exists():
+        with tarfile.open(fileobj=io.BytesIO(_bajar(voz)), mode="r:bz2") as tar:
+            _extraer_seguro(tar, DATOS / "voces")
     # prueba de punta a punta de la voz
-    davefx = str(CFG["voces"]["davefx"])
+    davefx = str(modelo)
     prueba = DATOS / "prueba.wav"
     r = subprocess.run([sys.executable, "-m", "piper", "-m", davefx, "-c", davefx + ".json", "-f", str(prueba)],
-                       input="Hola, ya está todo listo.".encode("utf-8"), capture_output=True)
+                       input=("Hola, ya está todo listo." if a.idioma == "es" else "Hi, everything is ready.").encode("utf-8"),
+                       capture_output=True)
     if r.returncode != 0 or not prueba.exists():
         print("Piper no pudo generar la voz:\n" + r.stderr.decode("utf-8", "replace")[-800:])
         return 1
@@ -141,7 +159,8 @@ def cmd_corpus(a: argparse.Namespace) -> int:
     t = a.trabajo
     repo = _extraer(a.repo, t / "material" / "repo") if a.repo else None
     docs = [_extraer(d, t / "material" / d.stem) if d.suffix.lower() == ".zip" else d for d in a.doc]
-    origen = {"repo": str(repo.resolve()) if repo else None, "docs": [str(Path(d).resolve()) for d in docs]}
+    origen = {"repo": str(repo.resolve()) if repo else None, "docs": [str(Path(d).resolve()) for d in docs],
+              "modo": a.modo, "estilo": a.estilo or "cuaderno", "idioma": a.idioma}
     c = fuentes.cargar(repo, [Path(d) for d in docs])
     texto = c.texto_para_llm()
     escribir(t / "origen.json", origen)
@@ -151,8 +170,9 @@ def cmd_corpus(a: argparse.Namespace) -> int:
     if c.omitidos:
         print("omitidos (binarios o > 200 KB):", ", ".join(c.omitidos[:20]))
     if len(texto) > 600_000:
-        print("AVISO  material muy grande: pedí solo las carpetas relevantes para la defensa")
-    registrar(t, "corpus", archivos=len(c.archivos), caracteres=len(texto))
+        print("AVISO  material muy grande: pedí solo las carpetas o los capítulos que importan")
+    print(f"modo {a.modo}: seguí prompts/{a.modo}/inventario.md")
+    registrar(t, "corpus", modo=a.modo, archivos=len(c.archivos), caracteres=len(texto))
     return 0
 
 
@@ -164,14 +184,31 @@ def cmd_verificar(a: argparse.Namespace) -> int:
     ids = [x.get("id") for x in inv.get("afirmaciones", [])]
     if len(ids) != len(set(ids)):
         print("ERROR  hay ids de afirmación repetidos"); return 1
-    faltan = [x.get("id") for x in inv["afirmaciones"] if not all(k in x for k in ("id", "texto", "fuente", "cita", "tipo"))]
+    def claves(x):
+        return ("id", "texto", "tipo") if x.get("origen") == "general" else ("id", "texto", "fuente", "cita", "tipo")
+    faltan = [x.get("id") for x in inv["afirmaciones"] if not all(k in x for k in claves(x))]
     if faltan:
-        print(f"ERROR  afirmaciones sin id/texto/fuente/cita/tipo: {faltan}"); return 1
+        print(f"ERROR  afirmaciones a las que les faltan claves (id, texto, tipo y, si salen del material, fuente y cita): {faltan}")
+        return 1
+    if not MODOS[o.get("modo", "proyecto")]["aprobar"]:
+        # en una materia quien estudia no puede saber si un dato es cierto: lo que no se verifica, no entra
+        quitados = [x["id"] for x in inv["afirmaciones"] if x.pop("aprobado", None)]
+        if quitados:
+            print(f"AVISO  en modo materia no se aprueba a mano; ignoro «aprobado» en {', '.join(quitados)}")
     inv = fuentes.verificar(inv, corpus)
+    if not MODOS[o.get("modo", "proyecto")]["generales"]:
+        for x in inv["afirmaciones"]:
+            if x["estado"] == "general":
+                x["estado"] = "comprobar"
+                x["motivos"].append("en un proyecto todo tiene que salir del material")
     inv["origen"] = o
     escribir(t / "inventario.json", inv)
     resumen_inventario(inv)
-    registrar(t, "verificar", total=len(inv["afirmaciones"]), ok=sum(x["estado"] == "ok" for x in inv["afirmaciones"]))
+    gen = sum(x["estado"] == "general" for x in inv["afirmaciones"])
+    if gen:
+        print(f"{gen} métodos o trampas generales (no salen del material; el video los marca)")
+    registrar(t, "verificar", total=len(inv["afirmaciones"]), ok=sum(x["estado"] == "ok" for x in inv["afirmaciones"]),
+              generales=gen)
     return 0
 
 
@@ -187,7 +224,8 @@ def cmd_temas(a: argparse.Namespace) -> int:
 
 
 def cmd_pedido(a: argparse.Namespace) -> int:
-    print(pedido_guion(leer(a.trabajo / "inventario.json"), leer(a.trabajo / "temas.json")["temas"], a.tema))
+    print(pedido_guion(leer(a.trabajo / "inventario.json"), leer(a.trabajo / "temas.json")["temas"], a.tema,
+                       modo_de(a.trabajo), idioma_de(a.trabajo)))
     return 0
 
 
@@ -197,9 +235,15 @@ def cmd_guion(a: argparse.Namespace) -> int:
     intento = previo.get("intentos", 0) + 1
     try:
         guion = leer(carpeta / "guion.json")
-        lex = {k.lower(): v for k, v in leer(LEXICO).items()}
+        tx = textos(t)
+        lex = {k.lower(): v for k, v in leer(AQUI / tx["lexico"]).items()}
         lex.update({k.lower(): v for k, v in guion.get("lexico", {}).items()})
-        spec, rep = compilar(guion, lex, ICONOS, leer(t / "inventario.json"))
+        guion["idioma"] = idioma_de(t)
+        if isinstance(guion.get("final"), dict):
+            guion["final"].setdefault("titulo", tx["titulo_final"])
+            guion["final"].setdefault("decilo", tx["decilo"])
+            guion["final"]["etiqueta_manana"] = f"{tx['manana']}: {guion['final'].get('mañana', '')}"
+        spec, rep = compilar(guion, lex, ICONOS, leer(t / "inventario.json"), ritmo=tx["ritmo"])
         errores, avisos = rep.errores, rep.avisos
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
         spec, errores, avisos = {}, [f"el JSON no se pudo leer: {e}"], []
@@ -225,14 +269,24 @@ def _tema(t: Path, tema_id: str) -> dict[str, Any]:
     return next((x for x in leer(t / "temas.json")["temas"] if x["id"] == tema_id), {"id": tema_id, "titulo": tema_id})
 
 
-def hacer_video(t: Path, tema_id: str, voz: str | None) -> Path:
+def estilo_de(t: Path, pedido: str | None) -> str:
+    if pedido:
+        return pedido
+    o = t / "origen.json"
+    return leer(o).get("estilo", "cuaderno") if o.exists() else "cuaderno"
+
+
+def hacer_video(t: Path, tema_id: str, voz: str | None, estilo: str | None = None) -> Path:
     import reproductor
     carpeta = t / tema_id
     if not (carpeta / "spec.json").exists():
         raise SystemExit(f"{tema_id}: no hay spec.json; primero `s2s.py guion -t {t} --tema {tema_id}` sin errores")
     inicio = time.time()
-    subprocess.run([sys.executable, str(AQUI / "voice.py"), str(carpeta)] + ([voz] if voz else []), check=True)
-    subprocess.run([sys.executable, str(AQUI / "engine.py"), str(carpeta)], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([sys.executable, str(AQUI / "voice.py"), str(carpeta), voz or textos(t)["voz"]], check=True)
+    subprocess.run([sys.executable, str(AQUI / "engine.py"), str(carpeta), estilo_de(t, estilo)], check=True,
+                   stdout=subprocess.DEVNULL)
+    for av in leer(carpeta / "avisos.json") if (carpeta / "avisos.json").exists() else []:
+        print("AVISO     ", av["msg"])
     tema = _tema(t, tema_id)
     destino = reproductor.construir(carpeta, t / "videos" / f"{tema_id}.html", tema["titulo"])
     dur = leer(carpeta / "timing.json")["duration"]
@@ -242,7 +296,7 @@ def hacer_video(t: Path, tema_id: str, voz: str | None) -> Path:
 
 
 def cmd_video(a: argparse.Namespace) -> int:
-    hacer_video(a.trabajo, a.tema, a.voz)
+    hacer_video(a.trabajo, a.tema, a.voz, a.estilo)
     return 0
 
 
@@ -256,12 +310,13 @@ def cmd_videos(a: argparse.Namespace) -> int:
             print(f"  {x['id']}: sin guion validado, lo salteo")
             continue
         if a.todo or not html.exists() or html.stat().st_mtime < (c / "spec.json").stat().st_mtime:
-            hacer_video(t, x["id"], a.voz)
+            hacer_video(t, x["id"], a.voz, a.estilo)
         lista.append({"archivo": html.name, "titulo": x["titulo"], "pregunta": x.get("pregunta", ""),
                       "duracion": leer(c / "timing.json")["duration"]})
     if not lista:
         print("no hay videos para armar"); return 1
-    idx = reproductor.indice(t / "videos" / "index.html", a.titulo, lista)
+    titulo = a.titulo or ("Para estudiar" if idioma_de(t) == "es" else "Study playlist")
+    idx = reproductor.indice(t / "videos" / "index.html", titulo, lista, idioma_de(t))
     print(f"{len(lista)} videos → abrí {idx}")
     return 0
 
@@ -290,7 +345,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--doc", type=Path, action="append", default=[])
     ap.add_argument("--tema")
     ap.add_argument("--voz", help="voz de Piper (por defecto davefx)")
-    ap.add_argument("--titulo", default="Preparación de la defensa")
+    ap.add_argument("--titulo", default="")
+    ap.add_argument("--estilo", choices=sorted(p.stem for p in (AQUI / "temas").glob("*.json")),
+                    help="cómo se ve el video (por defecto, el que se eligió en corpus, o cuaderno)")
+    ap.add_argument("--idioma", choices=sorted(IDIOMAS), default="es", help="corpus: idioma de los videos")
+    ap.add_argument("--modo", choices=sorted(MODOS), default="proyecto",
+                    help="corpus: proyecto (lo hiciste vos) o materia (estudiás para un examen)")
     ap.add_argument("--todo", action="store_true", help="videos: rehacer aunque ya existan")
     a = ap.parse_args(argv)
     if a.etapa != "instalar" and not a.trabajo:

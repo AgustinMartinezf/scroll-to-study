@@ -5,8 +5,10 @@
 
 engine.py arma una composición de HyperFrames: una línea de tiempo GSAP en pausa, "clips" que se
 muestran según data-start/data-duration y varios <audio> sueltos. Acá se hace lo que haría un runtime:
-  - se mezclan todos los <audio> en una pista MP3 (un celular no sincroniza 30 audios sueltos);
-  - el audio es el reloj: en cada cuadro, tl.seek(audio.currentTime) y visibilidad de los clips;
+  - se mezclan todos los <audio> en una pista MP3 a −14 LUFS (un celular no sincroniza 30 audios sueltos);
+  - el audio es el reloj: en cada cuadro, tl.seek(tiempo del audio) y visibilidad de los clips;
+  - el MP3 va como texto y se decodifica con Web Audio (sin <audio> ni URL data:, que algunos
+    visores bloquean);
   - se incrustan Inter y JetBrains Mono (el layout se calculó con esas fuentes) y engine.js corre
     recién cuando cargaron, porque mide posiciones con getBoundingClientRect;
   - el lienzo de 1080x1920 se escala a la pantalla después de que engine.js midió.
@@ -17,6 +19,7 @@ from __future__ import annotations
 import base64
 import html
 import io
+import json
 import re
 import sys
 from pathlib import Path
@@ -41,15 +44,26 @@ html, body { width:100% !important; height:100% !important; background:#000 !imp
 #s2s-barra { position:fixed; left:0; bottom:0; height:4px; width:0; background:#1fbf6a; z-index:98; }
 """
 
+TEXTOS = {
+    "es": {"tocar": "Tocar para ver", "seguir": "Seguir", "otraVez": "Ver de nuevo", "cargando": "Cargando…",
+           "error": "No se pudo reproducir", "sub": "Un video por día, en orden. Cada uno prepara una pregunta que te pueden hacer."},
+    "en": {"tocar": "Tap to play", "seguir": "Resume", "otraVez": "Watch again", "cargando": "Loading…",
+           "error": "Couldn't play", "sub": "One video a day, in order. Each one prepares a question you may get."},
+}
+
 PLAYER_JS = """
 (function () {
-  const A = document.getElementById("s2s-audio"), root = document.getElementById("root");
+  // El audio se decodifica con Web Audio desde el propio archivo: no usa un elemento de audio ni URLs
+  // data:, que algunos visores (vistas previas, apps) bloquean por su política de contenido.
+  const root = document.getElementById("root");
   const tapa = document.getElementById("s2s-tapa"), boton = tapa.querySelector("button");
   const barra = document.getElementById("s2s-barra");
   const tl = window.__timelines.main, D = tl.duration();
   const clips = [...document.querySelectorAll("#root .clip")].map(e => ({ e, s: +e.dataset.start, d: +e.dataset.duration }));
+  let ctx = null, buffer = null, fuente = null, t0 = 0, pos = 0, sonando = false;
+  const ahora = () => sonando ? Math.min(D, ctx.currentTime - t0) : pos;
   const avisar = (tipo) => {
-    const detalle = { tipo, t: +A.currentTime.toFixed(2), video: document.title };
+    const detalle = { tipo, t: +ahora().toFixed(2), video: document.title };
     window.dispatchEvent(new CustomEvent("s2s", { detail: detalle }));
     if (window.parent !== window) window.parent.postMessage({ s2s: detalle }, "*");
   };
@@ -62,17 +76,36 @@ PLAYER_JS = """
     for (const c of clips) c.e.style.visibility = (t >= c.s && t < c.s + c.d) ? "" : "hidden";
     barra.style.width = (100 * t / D) + "%";
   }
-  function bucle() { pintar(A.currentTime); if (!A.paused) requestAnimationFrame(bucle); }
-  tapa.addEventListener("click", () => {
-    if (A.ended) A.currentTime = 0;
-    A.play().then(() => { tapa.hidden = true; avisar(A.currentTime < 0.1 ? "inicio" : "sigue"); requestAnimationFrame(bucle); })
-             .catch(err => { boton.textContent = "No se pudo reproducir"; console.error(err); });
+  function bucle() { pintar(ahora()); if (sonando) requestAnimationFrame(bucle); }
+  function decodificar() {
+    const b64 = document.getElementById("s2s-mp3").textContent.trim();
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Promise((ok, mal) => ctx.decodeAudioData(bytes.buffer, ok, mal));
+  }
+  function terminar() {
+    sonando = false; pos = D; pintar(D);
+    boton.textContent = TX.otraVez; tapa.hidden = false; avisar("fin");
+  }
+  async function reproducir() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") await ctx.resume();
+    if (!buffer) { boton.textContent = TX.cargando; buffer = await decodificar(); }
+    if (pos >= D - 0.05) pos = 0;
+    fuente = ctx.createBufferSource(); fuente.buffer = buffer; fuente.connect(ctx.destination);
+    fuente.onended = () => { if (sonando && ahora() >= D - 0.1) terminar(); };
+    t0 = ctx.currentTime - pos; fuente.start(0, pos); sonando = true;
+    tapa.hidden = true; avisar(pos < 0.1 ? "inicio" : "sigue"); requestAnimationFrame(bucle);
+  }
+  tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
+  root.addEventListener("click", () => {
+    if (!sonando) return;
+    pos = ahora(); sonando = false; try { fuente.stop(); } catch (e) {}
+    boton.textContent = TX.seguir; tapa.hidden = false; avisar("pausa");
   });
-  root.addEventListener("click", () => { if (!A.paused) { A.pause(); boton.textContent = "Seguir"; tapa.hidden = false; avisar("pausa"); } });
-  A.addEventListener("ended", () => { pintar(D); boton.textContent = "Ver de nuevo"; tapa.hidden = false; avisar("fin"); });
   addEventListener("resize", encajar);
   encajar(); pintar(0);
-  window.__s2s = { pintar, D };          // para pruebas: pintar(t) dibuja el cuadro del segundo t
+  window.__s2s = { pintar, D, ahora, reproducir };   // para pruebas
   document.documentElement.dataset.s2sListo = "1";
 })();
 """
@@ -97,7 +130,7 @@ def pista(carpeta: Path, src_html: str, dur: float) -> bytes:
         audio = sonido.musica(dur) if p is None else sonido.leer(p)
         pistas.append((audio, ini, d, float(a.get("data-volume", 1))))
     buf = io.BytesIO()
-    sonido.sf.write(buf, sonido.mezclar(pistas, dur), sonido.SR, format="MP3", subtype="MPEG_LAYER_III")
+    sonido.sf.write(buf, sonido.normalizar(sonido.mezclar(pistas, dur)), sonido.SR, format="MP3", subtype="MPEG_LAYER_III")
     return buf.getvalue()
 
 
@@ -111,8 +144,37 @@ def fuentes_css() -> str:
     return "\n".join(reglas)
 
 
+def katex_embebido() -> tuple[str, str]:
+    """(css con las fuentes adentro, js) de KaTeX, o ("", "") si no está instalado."""
+    k = Path(CFG["katex"])
+    if not (k / "katex.min.js").exists():
+        return "", ""
+    css = (k / "katex.min.css").read_text(encoding="utf-8")
+    def fuente(m):
+        f = k / "fonts" / (m.group(1) + ".woff2")
+        return f"url(data:font/woff2;base64,{base64.b64encode(f.read_bytes()).decode()}) format(\"woff2\")" if f.exists() else ""
+    css = re.sub(r"url\(fonts/([\w-]+)\.woff2\) format\(\"woff2\"\)", fuente, css)
+    css = re.sub(r",\s*url\(fonts/[^)]+\) format\(\"[^\"]+\"\)", "", css)      # sin woff ni ttf
+    return css, (k / "katex.min.js").read_text(encoding="utf-8")
+
+
+DIBUJAR_FORMULAS = """
+const formulas = [...document.querySelectorAll(".ftex")];
+if (formulas.length && window.katex) formulas.forEach(e => {
+  katex.render(e.dataset.tex, e, { throwOnError: false, displayMode: false });
+  if (e.querySelector(".katex-error")) console.error("fórmula con error: " + e.dataset.tex);
+});
+const fuentesKatex = ["KaTeX_Main", "KaTeX_Math", "KaTeX_Size1", "KaTeX_Size2", "KaTeX_Size3", "KaTeX_Size4", "KaTeX_AMS"];
+const cargarFuentes = formulas.length && window.katex
+  ? Promise.all(fuentesKatex.map(f => document.fonts.load("64px " + f).catch(() => null))) : Promise.resolve();
+"""
+
+
 def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
     src = (carpeta / "index.html").read_text(encoding="utf-8")
+    spec = carpeta / "spec.json"
+    idioma = json.loads(spec.read_text(encoding="utf-8")).get("IDIOMA", "es") if spec.exists() else "es"
+    tx = TEXTOS.get(idioma, TEXTOS["es"])
     if src.count("<audio") != len(AUDIO_RE.findall(src)) or GSAP_TAG not in src or not SCRIPT_ENGINE_RE.search(src):
         sys.exit(f"{carpeta}/index.html no tiene el formato que espero de engine.py")
     gsap = Path(CFG["gsap"])
@@ -126,13 +188,18 @@ def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
     out = out.replace('<meta name="viewport" content="width=1080, height=1920" />',
                       '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />'
                       f"<title>{html.escape(titulo or carpeta.name)}</title>", 1)
-    out = out.replace("</style>", f"{fuentes_css()}\n{PLAYER_CSS}</style>", 1)
+    kcss, kjs = katex_embebido() if 'class="formula"' in out else ("", "")
+    if 'class="formula"' in out and not kjs:
+        print("AVISO  el video tiene fórmulas pero KaTeX no está instalado: corré `s2s.py instalar`")
+    out = out.replace("</style>", f"{fuentes_css()}\n{kcss}\n{PLAYER_CSS}</style>", 1)
+    if kjs:
+        out = out.replace("</style>", "</style><script>" + kjs + "</script>", 1)
     m = SCRIPT_ENGINE_RE.search(out)       # se busca de nuevo: el texto cambió arriba
-    motor = ("window.__timelines = {};\n"
-             "document.fonts.ready.then(() => {\n" + m.group(1) + "\n" + m.group(2) + "\n" + PLAYER_JS + "\n});")
+    motor = ("window.__timelines = {};\nconst TX = " + json.dumps(tx, ensure_ascii=False) + ";\n" + DIBUJAR_FORMULAS +
+             "Promise.all([document.fonts.ready, cargarFuentes]).then(() => {\n" + m.group(1) + "\n" + m.group(2) + "\n" + PLAYER_JS + "\n});")
     out = out[:m.start()] + (
-        f'<audio id="s2s-audio" preload="auto" playsinline src="data:audio/mpeg;base64,{mp3}"></audio>'
-        '<div id="s2s-barra"></div><div id="s2s-tapa"><button>Tocar para ver</button></div>'
+        f'<script type="application/octet-stream" id="s2s-mp3">{mp3}</script>'
+        f'<div id="s2s-barra"></div><div id="s2s-tapa"><button>{tx["tocar"]}</button></div>'
         f"<script>{motor}</script>") + out[m.end():]
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(out, encoding="utf-8")
@@ -140,7 +207,7 @@ def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
 
 
 INDICE = """<!doctype html>
-<html lang="es"><head><meta charset="UTF-8">
+<html lang="{idioma}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{titulo}</title>
 <style>
@@ -160,7 +227,7 @@ li a::before {{ counter-increment:n; content:counter(n); font-variant-numeric:ta
 .dur {{ color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }}
 </style></head><body><main>
 <h1>{titulo}</h1>
-<p class="sub">Un video por día, en orden. Cada uno prepara una pregunta del tribunal.</p>
+<p class="sub">{sub}</p>
 <ol>
 {items}
 </ol>
@@ -168,14 +235,15 @@ li a::before {{ counter-increment:n; content:counter(n); font-variant-numeric:ta
 """
 
 
-def indice(destino: Path, titulo: str, videos: list[dict]) -> Path:
+def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -> Path:
     """videos: [{archivo, titulo, pregunta, duracion}] en el orden en que se ven."""
     items = "\n".join(
         f'<li><a href="{html.escape(v["archivo"])}"><span><b>{html.escape(v["titulo"])}</b>'
         f'<span class="preg">{html.escape(v.get("pregunta", ""))}</span></span>'
         f'<span class="dur">{int(v["duracion"]) // 60}:{int(v["duracion"]) % 60:02d}</span></a></li>'
         for v in videos)
-    destino.write_text(INDICE.format(titulo=html.escape(titulo), items=items), encoding="utf-8")
+    destino.write_text(INDICE.format(titulo=html.escape(titulo), items=items, idioma=idioma,
+                                     sub=TEXTOS[idioma]["sub"]), encoding="utf-8")
     return destino
 
 
