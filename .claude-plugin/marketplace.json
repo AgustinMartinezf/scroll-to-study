@@ -1,0 +1,14 @@
+{
+  "name": "scroll-to-study",
+  "owner": {
+    "name": "Guti"
+  },
+  "plugins": [
+    {
+      "name": "scroll-to-study",
+      "source": "./",
+      "description": "Del material de tu proyecto a videos cortos para preparar la defensa oral."
+    }
+  ],
+  "description": "Herramientas de estudio para Claude Code."
+}

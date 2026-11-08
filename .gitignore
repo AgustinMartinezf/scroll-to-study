@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+# carpetas de trabajo de quien prueba la herramienta acá adentro (tienen material personal)
+/scroll-to-study/
+/videos/

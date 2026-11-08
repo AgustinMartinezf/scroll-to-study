@@ -1,0 +1,70 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1", "A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "table", "id": "m", "title": "multa", "cols": ["id_prestamo", "monto", "motivo"],
+     "rows": [["17", "120", "atraso"], ["99", "80", "atraso"]]},
+    {"type": "chip", "id": "fkp", "text": "FK id_prestamo → prestamo", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "toast", "id": "e1", "text": "ERROR 1452 · fk_multa_prestamo"}
+   ],
+   "frases": [
+    "{show m}¿Puede haber una {show m-r0}multa por un libro que {show m-r1}no se prestó? En nuestra base, {bad m-r1}[-no].",
+    "La multa no apunta al socio: apunta al {show fkp}{good m-r0 +0.2}[+préstamo].",
+    "La FK es {hl m-h0}id_prestamo: cada multa nace de un préstamo [+real].",
+    "Si ese préstamo no existe, la multa no {show e1}[-entra]."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "chip", "id": "fks", "text": "prestamo → socio (ci_socio)", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "chip", "id": "solo", "text": "solo socios que se llevaron algo", "kind": "white", "icon": "users"},
+    {"type": "flow", "id": "cad", "items": [{"id": "k1", "text": "socio", "icon": "users"}, {"id": "k2", "text": "préstamo", "icon": "list-checks"}, {"id": "k3", "text": "multa", "icon": "check-circle", "kind": "good"}]}
+   ],
+   "frases": [
+    "Y el préstamo apunta al {show fks}[+socio] por ci_socio.",
+    "Así, solo se multa a socios que se llevaron un {show solo}ejemplar.",
+    "La [+cadena] queda: {show k1}socio, {show k2}préstamo, {show k3}multa."
+   ]
+  },
+  {
+   "fuentes": ["A5", "A6"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "dialog", "id": "nov", "char": "novato", "text": "¿Y una FK directa a socio?"},
+    {"type": "chip", "id": "imp", "text": "Ya está implícita en el préstamo", "kind": "good", "icon": "check-circle"},
+    {"type": "chip", "id": "dos", "text": "Un segundo camino que puede contradecir", "kind": "bad", "icon": "warning"}
+   ],
+   "frases": [
+    "¿Y por qué no una {show nov}FK directa a socio?",
+    "Porque ya está {show imp}[+implícita], y abriría un segundo camino que podría {show dos}[-contradecirla]."
+   ]
+  },
+  {
+   "fuentes": ["A7", "A8"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "table", "id": "r", "title": "reserva", "cols": ["id_ejemplar", "ci_socio", "estado"], "rows": [["301", "41234567", "activa"]]},
+    {"type": "chip", "id": "fkr", "text": "FK id_ejemplar → ejemplar", "kind": "good", "mono": true, "icon": "arrow-right"},
+    {"type": "chip", "id": "una", "text": "se reserva una copia concreta", "kind": "white"},
+    {"type": "chip", "id": "trg", "text": "¿ya está prestado? → trigger", "kind": "warn", "icon": "lightning"}
+   ],
+   "frases": [
+    "La {show r}{show r-r0 +0.2}reserva apunta al ejemplar, no al libro: {show fkr}{hl r-h0 +0.1}id_ejemplar.",
+    "Así se reserva una {show una}copia concreta, no un título cualquiera.",
+    "Lo que una FK no ve, como que el ejemplar ya esté prestado, va en un {show trg}{boom trg +0.3}[-trigger]."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "En la [+defensa] decí: FK {show fl1}en cadena, {show fl2}socio, préstamo, multa, y la base lo controla sola.",
+   "{show fnext}Mañana: la PK de ejemplar."
+  ],
+  "lineas": ["<b>FK en cadena</b>, sin atajos", "socio → préstamo → multa"],
+  "mañana": "la PK de ejemplar"
+ }
+}
