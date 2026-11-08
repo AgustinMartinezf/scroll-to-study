@@ -124,3 +124,92 @@ def test_rango_amplio_y_pdf():
     assert "demasiado amplio" in c.fragmento("a.sql:1-80")[1]
     assert c.fragmento("inf.pdf:p2") == ("dos FK", None)
     assert "tiene 2 páginas" in c.fragmento("inf.pdf:p5")[1]
+
+
+def test_modo_materia_no_deja_aprobar_y_cambia_el_pedido(tmp_path, capsys):
+    t = tmp_path / "trabajo"
+    s2s.main(["corpus", "-t", str(t), "--modo", "materia", "--repo", str(FIX)])
+    inv = json.loads(json.dumps(INVENTARIO)); inv["afirmaciones"][6]["aprobado"] = True     # A7
+    (t / "inventario.json").write_text(json.dumps(inv))
+    s2s.main(["verificar", "-t", str(t)])
+    assert "no se aprueba a mano" in capsys.readouterr().out
+    assert _inv(t)["A7"]["estado"] == "comprobar"
+    (t / "temas.json").write_text(json.dumps(TEMAS)); s2s.main(["temas", "-t", str(t)])
+    capsys.readouterr()
+    s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
+    out = capsys.readouterr().out
+    assert "Pregunta de examen:" in out and "CIERRE: Para el examen, acordate:" in out
+
+
+def test_titulo_del_cierre_segun_el_modo(t):
+    d = t / "t01"; d.mkdir(); (d / "guion.json").write_text(json.dumps(guion_bueno()))
+    s2s.main(["guion", "-t", str(t), "--tema", "t01"])
+    assert json.loads((d / "spec.json").read_text())["FINAL"]["title"] == "PARA EXPLICARLO"
+
+
+GENERALES = [
+    {"id": "G1", "origen": "general", "tipo": "metodo", "para": ["A1"], "texto": "Un método estándar para ese ejercicio."},
+    {"id": "G2", "origen": "general", "tipo": "definicion", "para": ["A1"], "texto": "Una definición que no está en el material."},
+    {"id": "G3", "origen": "general", "tipo": "trampa", "para": ["A5"], "texto": "Apunta a algo sin verificar."},
+    {"id": "G4", "origen": "general", "tipo": "trampa", "texto": "No dice para qué ejercicio es."},
+]
+
+
+def _con_generales(tmp_path, modo):
+    t = tmp_path / modo
+    s2s.main(["corpus", "-t", str(t), "--modo", modo, "--repo", str(FIX)])
+    inv = json.loads(json.dumps(INVENTARIO))
+    inv["afirmaciones"][0]["tipo"] = "ejercicio"                       # A1 hace de ejercicio del material
+    inv["afirmaciones"] += json.loads(json.dumps(GENERALES))
+    (t / "inventario.json").write_text(json.dumps(inv))
+    s2s.main(["verificar", "-t", str(t)])
+    return t
+
+
+def test_metodos_generales_en_materia(tmp_path):
+    inv = _inv(_con_generales(tmp_path, "materia"))
+    assert inv["G1"]["estado"] == "general"
+    assert inv["G2"]["estado"] == "comprobar" and "metodo|trampa" in inv["G2"]["motivos"][0]
+    assert inv["G3"]["estado"] == "comprobar" and "A5 no lo es" in inv["G3"]["motivos"][0]
+    assert inv["G4"]["estado"] == "comprobar" and "falta «para»" in inv["G4"]["motivos"][0]
+
+
+def test_en_un_proyecto_no_hay_metodos_generales(tmp_path):
+    inv = _inv(_con_generales(tmp_path, "proyecto"))
+    assert inv["G1"]["estado"] == "comprobar"
+
+
+def test_tema_y_video_marcan_lo_general(tmp_path, capsys):
+    t = _con_generales(tmp_path, "materia")
+    (t / "temas.json").write_text(json.dumps({"temas": [
+        {"id": "t01", "titulo": "Uno", "pregunta": "¿?", "afirmaciones": ["A1", "G1"]},
+        {"id": "t02", "titulo": "Dos", "pregunta": "¿?", "afirmaciones": ["G1"]}]}))
+    s2s.main(["temas", "-t", str(t)])
+    assert "t02: solo tiene métodos generales" in capsys.readouterr().out
+    s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
+    assert "G1 (método general, NO está en el material)" in capsys.readouterr().out
+    d = t / "t01"; d.mkdir(); g = guion_bueno(); g["bloques"][1]["fuentes"] = ["G1"]
+    (d / "guion.json").write_text(json.dumps(g))
+    assert s2s.main(["guion", "-t", str(t), "--tema", "t01"]) == 0
+    assert json.loads((d / "spec.json").read_text())["GENERAL"] == [False, True, False, False]
+
+
+def test_formato_segun_el_contenido():
+    from etapas import elegir_formato
+    assert elegir_formato({}, [{"tipo": "trampa"}, {"tipo": "ejercicio"}], "materia") == "mito"
+    assert elegir_formato({}, [{"tipo": "procedimiento"}], "materia") == "pasos"
+    assert elegir_formato({}, [{"tipo": "decision"}, {"tipo": "motivo"}], "proyecto") == "historia"
+    assert elegir_formato({}, [{"tipo": "definicion"}], "materia") == "pregunta"
+    assert elegir_formato({"formato": "avsb"}, [{"tipo": "trampa"}], "materia") == "avsb"     # la persona manda
+
+
+def test_pedido_en_ingles(tmp_path, capsys):
+    t = tmp_path / "en"
+    s2s.main(["corpus", "-t", str(t), "--idioma", "en", "--repo", str(FIX)])
+    (t / "inventario.json").write_text(json.dumps(INVENTARIO)); s2s.main(["verificar", "-t", str(t)])
+    (t / "temas.json").write_text(json.dumps(TEMAS)); s2s.main(["temas", "-t", str(t)])
+    capsys.readouterr()
+    s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
+    out = capsys.readouterr().out
+    assert "IDIOMA DEL VIDEO: en" in out and "example_script_en.json" in out and "CIERRE: If they ask you, say:" in out
+    assert "FORMATO: historia" in out

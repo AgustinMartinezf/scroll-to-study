@@ -1,101 +1,118 @@
 # scroll to study
 
-Convierte el material de tu proyecto (código, informe, letra del obligatorio) en videos verticales
-de 45–60 segundos para preparar la defensa oral. Uno por día, cada uno prepara una pregunta que el
-tribunal te puede hacer. Funciona como plugin de **Claude Code**: lo usás con tu propio Claude y todo
-queda en tu computadora.
+Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.
+It works to **understand a project** (code, report, assignment brief) and to **study a course** for an
+exam (notes, slides, exercises): tables, chats, charts, formulas, Venn diagrams and protocols that
+animate right when the voice names them. Videos in English or Spanish. It is a **Claude Code** plugin:
+you use it with your own Claude, and everything stays on your computer.
 
-La diferencia con otras herramientas de "estudiar scrolleando": **cada dato del video se verifica
-contra tu material**. Claude propone afirmaciones con una cita textual y la fuente (archivo y línea);
-un script comprueba que la cita esté ahí y que los nombres y números de la afirmación también. Lo que
-no se puede verificar no llega al video sin que vos lo apruebes.
+The difference from other "study by scrolling" tools: **every fact in a video is checked against your
+material**. Claude proposes statements with a verbatim quote and its source (file and line, or PDF
+page); a script checks that the quote is there and that the names and numbers in the statement are
+too. Whatever cannot be checked does not reach the video: in your own project you can approve it
+yourself; in a course, it is left out.
 
-## Cómo funciona
+## How it works
 
 ```
-tu repo + informe ──► inventario de afirmaciones ──► verificación por código (cita textual, fuente)
-                                                          │
-            vos elegís los temas ◄── temas (8 a 15) ◄─────┘
-                    │
-                    ▼
-   guion por tema ──► validador ──► voz (Piper) + animación ──► video .html (se reproduce solo)
-   (solo ve las afirmaciones        (Claude corrige
-    verificadas de su tema)          lo que marca)
+your material ──► inventory of statements ──► checked by code (verbatim quote, source)
+                                                   │
+          you pick the topics ◄── topics (8–20) ◄──┘
+                  │
+                  ▼
+ script per topic ──► validator ──► voice (Piper) + animation ──► video .html (plays by itself)
+ (only sees the checked           (Claude fixes
+  statements of its topic)         what it flags)
 ```
 
-- Claude escribe el inventario, los temas y los guiones. Los scripts calculan todo lo demás:
-  tamaños de letra, pausas, pronunciación, sincronización de la animación con la voz.
-- La voz es [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `davefx`, español) y corre local.
-- Cada video es un único `.html` de ~1 MB, sin dependencias: se abre en el navegador de la compu o
-  del celular, sin internet. La lista de reproducción queda en `scroll-to-study/videos/index.html`.
+- Claude writes the inventory, the topics and the scripts. The scripts compute everything else:
+  font sizes, pauses, pronunciation, and syncing the animation with the voice.
+- Each video gets a format that fits its topic: question and answer (with a countdown so you try to
+  recall first), myth vs fact, A versus B, step by step, or the story of a decision. You can force one.
+- The voice is [Piper](https://github.com/OHF-Voice/piper1-gpl) and runs locally. The time of each
+  word comes from the voice model itself, so the animation lands on the word that names it.
+- Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your
+  computer or phone, offline. The playlist is at `scroll-to-study/videos/index.html`.
+- With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
+  each type of exercise and the general method and traps, labeled as "general method".
 
-## Ejemplo
+## Example
 
-`ejemplo/la-fk-de-multa.html` es un video generado con la herramienta sobre un proyecto inventado (una biblioteca, en `tests/fixtures/biblioteca`). Bajalo y abrilo en el navegador.
+`ejemplo/la-fk-de-multa.html` is a video made with the tool about an invented project (a library
+database, in `tests/fixtures/biblioteca`). Download it and open it in the browser.
 
-## Instalar
+## Install
 
-Necesitás [Claude Code](https://code.claude.com) y Python 3.10 o más nuevo.
+You need [Claude Code](https://code.claude.com) and Python 3.10 or newer.
 
 ```
 /plugin marketplace add AgustinMartinezf/scroll-to-study
 /plugin install scroll-to-study@scroll-to-study
 ```
 
-La primera vez, Claude instala las dependencias de Python (`numpy`, `soundfile`, `piper-tts`,
-`pypdf`) y baja la voz (~65 MB) y gsap a una carpeta de datos (`~/.scroll-to-study`, o la del
-plugin si Claude Code la define; `S2S_DATOS` la cambia).
+The first time, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`, `onnx`,
+`pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to a data folder
+(`~/.scroll-to-study`, or the plugin's if Claude Code sets one; `S2S_DATOS` changes it).
 
-## Usar
+## Use
 
-Abrí Claude Code en la carpeta de tu proyecto y pedile algo como:
+Open Claude Code in the folder of your project or your notes and ask something like:
 
-> Preparame la defensa del obligatorio con scroll to study. El informe está en docs/informe.pdf.
+> I want to really understand this project with scroll to study. The report is in docs/report.pdf.
 
-Claude va a frenar dos veces para que decidas: qué afirmaciones dudosas son ciertas, y qué temas
-entran. El resto lo hace solo.
+> I have a Networks midterm: make me scroll to study videos from theory.pdf and exercises.pdf.
 
-## Qué queda en tu carpeta
+Claude stops so you decide which topics go in (and, in a project, which doubtful facts are true).
+It does the rest by itself.
+
+## What ends up in your folder
 
 ```
 scroll-to-study/
-  corpus.txt          tu material numerado por línea (lo que lee Claude)
-  inventario.json     afirmaciones con fuente, cita y estado (ok / comprobar)
-  temas.json          los temas que elegiste
-  t01/ … t15/         guion.json + lo que genera el compilador y la voz
-  videos/index.html   la lista de reproducción
-  registro.jsonl      cuándo y cuántas veces se corrió cada etapa
+  corpus.txt          your material, numbered by line (what Claude reads)
+  inventario.json     statements with source, quote and state (ok / comprobar / general)
+  temas.json          the topics you picked
+  t01/ … t20/         guion.json + what the compiler and the voice generate
+  videos/index.html   the playlist
+  registro.jsonl      when and how many times each stage ran
 ```
 
-## Límites conocidos
+## Known limits
 
-- Pensado para la defensa de un proyecto propio, en español. Para exámenes falta un caso aparte:
-  quien estudia no puede validar si un dato es cierto.
-- Los tiempos de cada palabra se reparten por sílabas, no se alinean con el audio.
-- El aislamiento "el guion solo ve sus afirmaciones" es una instrucción a Claude, que ya leyó todo el
-  material; lo refuerza el validador, que marca nombres y números que no están en las fuentes.
-- Probado en Chromium. Falta probar más en Safari de iPhone.
+- The English voice (`hfc_male`) was trained on a CC BY-NC-SA dataset: fine for studying, not for
+  commercial use. The Spanish voice (`davefx`) has its own terms (see [THIRD_PARTY.md](THIRD_PARTY.md)).
+- Formulas are quoted by the text around them: PDF text extraction usually breaks formulas, so the
+  formula itself cannot be checked letter by letter against the material.
+- Diagrams that are only images in slides cannot be quoted, so they do not make it into the videos.
+- "The script only sees its statements" is an instruction to Claude, who has already read the whole
+  material; the validator backs it up by flagging names and numbers that are not in the sources.
+- Tested in Chromium. Safari on iPhone needs more testing.
 
-## Desarrollo
+## Development
 
 ```
 python -m pip install numpy soundfile pypdf pytest
 python -m pytest -q tests
 ```
 
-Los tests usan un proyecto inventado (`tests/fixtures/biblioteca`) y una voz en silencio, así que no
-necesitan Piper ni red. El código está en `skills/scroll-to-study/scripts/`:
+`tools/revisar.py VIDEO.html` opens a video in Chromium and checks what the style guide asks for: that
+the animation follows the audio, that nothing important falls outside the TikTok/Reels/Shorts safe
+zones, and that the picture never stays still for more than a second (needs `playwright`).
 
-| Archivo                        | Qué hace                                                                                    |
-| ------------------------------ | ------------------------------------------------------------------------------------------- |
-| `s2s.py`                       | La línea de comandos que usa Claude: corpus, verificar, temas, pedido, guion, video, videos |
-| `fuentes.py`                   | Numera el material y verifica cada afirmación contra su cita                                |
-| `compile.py`                   | Valida el guion y calcula lo que el modelo no decide (layout, pausas, pronunciación)        |
-| `voice.py`                     | Voz con Piper y tiempos por palabra                                                         |
-| `engine.py` + `engine.js`      | Arma la animación (GSAP)                                                                    |
-| `reproductor.py` + `sonido.py` | Mezcla el audio y deja un `.html` que se reproduce solo                                     |
+The tests use an invented project (`tests/fixtures/biblioteca`) and a silent voice, so they need
+neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (names are in Spanish):
 
-## Licencia
+| File | What it does |
+|---|---|
+| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, temas, pedido, guion, video, videos, estado |
+| `fuentes.py` | Numbers the material and checks each statement against its quote |
+| `etapas.py` | Modes, languages and formats; builds the request for each script |
+| `compile.py` | Validates the script and computes what the model does not decide (layout, pauses, pronunciation) |
+| `voice.py` | Voice with Piper and per-word timings |
+| `engine.py` + `engine.js` | Builds the animation (GSAP); looks come from `temas/` |
+| `reproductor.py` + `sonido.py` | Mixes the audio and outputs a `.html` that plays by itself |
 
-[AGPL-3.0](LICENSE). Si ofrecés una versión modificada como servicio, tenés que publicar su código.
-Los componentes de terceros y sus licencias están en [THIRD_PARTY.md](THIRD_PARTY.md).
+## License
+
+[AGPL-3.0](LICENSE). If you offer a modified version as a service, you must publish its code.
+Third-party components and their licenses are in [THIRD_PARTY.md](THIRD_PARTY.md).

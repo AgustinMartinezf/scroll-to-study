@@ -1,16 +1,17 @@
 {
   "name": "scroll-to-study",
   "version": "0.1.0",
-  "description": "Del material de tu proyecto a videos cortos para preparar la defensa oral, con cada dato verificado contra el material.",
+  "description": "Turns your study material into short vertical videos with voice (English or Spanish), with every fact checked against the material. For understanding a project or studying a course for an exam.",
   "license": "AGPL-3.0-only",
   "keywords": [
-    "estudio",
-    "defensa",
+    "study",
+    "exam",
     "videos",
-    "educación",
-    "español"
+    "education",
+    "spanish",
+    "english"
   ],
   "author": {
-    "name": "Guti"
+    "name": "AgustinMartinezf"
   }
 }

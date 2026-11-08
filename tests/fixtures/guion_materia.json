@@ -1,0 +1,16 @@
+{
+ "bloques": [
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "flow", "id": "hs", "items": [{"id": "cli", "text": "cliente", "icon": "users"}, {"id": "srv", "text": "servidor", "icon": "database"}]}
+   ],
+   "frases": ["¿Cómo {show hs}arranca una conexión TCP? Con tres {send hs de=cli a=srv texto=SYN}mensajes.",
+              "El servidor {send hs de=srv a=cli texto=SYN-ACK}responde, y el cliente {send hs de=cli a=srv texto=ACK}confirma."]},
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "formula", "id": "f", "tex": "\\frac{d}{dx}\\,x^{n} = n\\,x^{n-1}", "label": "regla de la potencia"},
+    {"type": "chip", "id": "ej", "text": "x³ → 3x²", "kind": "good"}
+   ],
+   "frases": ["Y en Matemática, la {show f}derivada de una potencia baja el exponente.", "Por ejemplo, equis al cubo da tres equis al {show ej}[+cuadrado]."]}
+ ],
+ "final": {"titulo": "PARA EL EXAMEN", "decilo": "Acordate de esto", "frases": ["Para el examen, [+acordate]: {show fl1}tres mensajes.", "{show fnext}Mañana: ventanas de TCP."],
+  "lineas": ["<b>SYN, SYN-ACK, ACK</b>"], "mañana": "ventanas de TCP"}
+}

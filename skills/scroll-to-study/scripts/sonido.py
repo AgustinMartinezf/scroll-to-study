@@ -63,3 +63,64 @@ def leer(p: Path) -> np.ndarray:
 
 def escribir_mp3(a: np.ndarray, p: Path) -> None:
     sf.write(str(p), a, SR, format="MP3", subtype="MPEG_LAYER_III")
+
+
+# ---------------------------------------------------------------------------
+# Volumen: −14 LUFS (lo que piden TikTok, Reels y Shorts) sin pasarse de −1 dBFS de pico
+# ---------------------------------------------------------------------------
+
+# filtros K de la ITU-R BS.1770 (coeficientes para 48 kHz); se aplican en frecuencia, solo para medir
+_K = [([1.53512485958697, -2.69169618940638, 1.19839281085285], [1, -1.69065929318241, 0.73248077421585]),
+      ([1.0, -2.0, 1.0], [1, -1.99004745483398, 0.99007225036621])]
+
+
+def _respuesta_k(n: int, sr: int) -> np.ndarray:
+    f = np.fft.rfftfreq(n, 1 / sr)
+    z = np.exp(-2j * np.pi * f / 48000)
+    h = np.ones_like(z)
+    for b, a in _K:
+        h *= (b[0] + b[1] * z + b[2] * z * z) / (a[0] + a[1] * z + a[2] * z * z)
+    return np.abs(h)
+
+
+def lufs(a: np.ndarray, sr: int = SR) -> float:
+    """Sonoridad integrada (BS.1770: filtro K, bloques de 400 ms, compuertas de −70 LUFS y −10 LU)."""
+    n = len(a)
+    if n < int(0.4 * sr):
+        return -70.0
+    k = _respuesta_k(n, sr)
+    y = np.stack([np.fft.irfft(np.fft.rfft(a[:, c]) * k, n) for c in range(a.shape[1])], axis=1)
+    blk, paso = int(0.4 * sr), int(0.1 * sr)
+    p2 = np.concatenate([[0.0], np.cumsum((y ** 2).sum(axis=1))])
+    inicios = np.arange(0, n - blk + 1, paso)
+    z = (p2[inicios + blk] - p2[inicios]) / blk
+    l = -0.691 + 10 * np.log10(np.maximum(z, 1e-12))
+    z = z[l > -70]
+    if not len(z):
+        return -70.0
+    rel = -0.691 + 10 * np.log10(z.mean()) - 10
+    z = z[-0.691 + 10 * np.log10(z) > rel]
+    return float(-0.691 + 10 * np.log10(z.mean()))
+
+
+def limitar(a: np.ndarray, techo: float = 0.84) -> np.ndarray:
+    """Limitador simple: baja la ganancia solo alrededor de los picos que pasan el techo (−1,5 dBFS: el MP3 sube un poco los picos)."""
+    ven = int(0.005 * SR)
+    n = len(a) // ven * ven
+    if n == 0:
+        return a
+    pico = np.abs(a[:n]).max(axis=1).reshape(-1, ven).max(axis=1)
+    g = np.minimum(1.0, techo / np.maximum(pico, 1e-9))
+    pad = 6                                                   # ±30 ms alrededor de cada pico
+    g = np.lib.stride_tricks.sliding_window_view(np.pad(g, pad, mode="edge"), 2 * pad + 1).min(axis=1)
+    g = np.convolve(np.pad(g, 2, mode="edge"), np.ones(5) / 5, mode="valid")   # sin saltos
+    gs = np.interp(np.arange(len(a)), np.arange(len(g)) * ven + ven / 2, g)
+    out = a * gs[:, None]
+    return np.clip(out, -techo, techo)
+
+
+def normalizar(a: np.ndarray, objetivo: float = -14.0) -> np.ndarray:
+    actual = lufs(a)
+    if actual <= -69:
+        return a
+    return limitar(a * 10 ** ((objetivo - actual) / 20)).astype(np.float32)

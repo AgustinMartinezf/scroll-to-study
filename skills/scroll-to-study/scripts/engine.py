@@ -7,6 +7,14 @@ composición de HyperFrames; reproductor.py la convierte en un video que se repr
 import json, re, os, sys, html as H
 from config import CFG
 
+# estilo visual: temas/<nombre>.json (+ .css). Segundo argumento o S2S_ESTILO; por defecto, cuaderno
+ESTILO = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("S2S_ESTILO", "cuaderno")
+_ruta_tema = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temas", f"{ESTILO}.json")
+if not os.path.exists(_ruta_tema):
+    raise SystemExit(f"estilo desconocido «{ESTILO}»")
+TEMA = json.load(open(_ruta_tema, encoding="utf-8"))
+TP = TEMA["py"]
+
 V = sys.argv[1]
 HERE = os.path.abspath(V)
 from types import SimpleNamespace
@@ -60,8 +68,7 @@ def character(cid, shirt, hair="#2b1d14", glasses=False, skin="#f2c6a0"):
 ROLES = {"novato": ("#f08a24", "#5a3a1c", False), "pro": ("#1fae66", "#111", True), "estudiante": ("#2f6fe4", "#2b1d14", False),
          "admin": ("#7a5af8", "#2b1d14", True), "docente": ("#e0a400", "#3a2a10", False)}
 
-KIND = {"good": ("#1fbf6a", "#04170b"), "bad": ("#e5483b", "#ffffff"), "warn": ("#ffcf3f", "#2a2000"),
-        "neutral": ("#2a3340", "#ffffff"), "blue": ("#2f6fe4", "#ffffff"), "white": ("#ffffff", "#121a15"), "purple": ("#7a5af8", "#ffffff")}
+KIND = {k: tuple(v) for k, v in TEMA["kind"].items()}
 SK = '<i class="sk" data-layout-allow-occlusion></i>'
 
 # ---------- elementos ----------
@@ -74,11 +81,11 @@ def el_table(e):
     for i, r in enumerate(e.get("rows", [])):
         rid = r.get("id", f'{e["id"]}-r{i}')
         cells = "".join(f'<div class="cell" id="{rid}-c{j}" style="font-size:{fs}px">{H.escape(str(c))}{SK}</div>' for j, c in enumerate(r["cells"]))
-        rows += f'<div class="row" id="{rid}" style="grid-template-columns:{gt}"><div class="ico"><span id="{rid}-ok">{icon("check-circle",60,"#13824a")}</span><span id="{rid}-no">{icon("x-circle",60,"#c2372b")}</span></div>{cells}</div>'
+        rows += f'<div class="row" id="{rid}" style="grid-template-columns:{gt}"><div class="ico"><span id="{rid}-ok">{icon("check-circle",60,TP["icoOk"])}</span><span id="{rid}-no">{icon("x-circle",60,TP["icoNo"])}</span></div>{cells}</div>'
     h = 120 + 86 + 108 * len(e.get("rows", [])) + 24
     tag = f'<span class="ttag">{H.escape(e["tag"])}</span>' if e.get("tag") else ""
     return (f'<div class="card tbl" id="{e["id"]}" style="width:{wid}px;">'
-            f'<div class="chead">{icon(e.get("icon","database"), 52, "#1f6b45")}<span>{H.escape(e["title"])}</span>{tag}</div>'
+            f'<div class="chead">{icon(e.get("icon","database"), 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span>{tag}</div>'
             f'<div class="hrow" style="grid-template-columns:{gt}"><div></div>{hcells}</div>{rows}</div>'), wid, h
 
 def el_chip(e):
@@ -98,7 +105,7 @@ def el_chip(e):
 
 def el_toast(e):
     bad = e.get("kind", "bad") == "bad"
-    col = "#e5483b" if bad else "#1fbf6a"
+    col = TP["toastMal"] if bad else TP["toastBien"]
     fs = e.get("fs", 40)
     w = min(980, int(len(e["text"]) * fs * 0.6) + 140)
     return (f'<div class="toast" id="{e["id"]}" style="border-color:{col};font-size:{fs}px">{icon("x-circle" if bad else "check-circle", 56, col)}<span>{H.escape(e["text"])}</span></div>'), w, fs + 70
@@ -121,14 +128,14 @@ def el_list(e):
     items = ""
     for it in e["items"]:
         iid, txt = it[0], it[1]
-        ic = icon(it[2], 58, it[3] if len(it) > 3 else "#1f6b45") if len(it) > 2 and it[2] else ""
+        ic = icon(it[2], 58, it[3] if len(it) > 3 else TP["cabeza"]) if len(it) > 2 and it[2] else ""
         items += f'<div class="li" id="{iid}">{ic}<span>{txt}</span>{SK}</div>'
-    head = f'<div class="lhead">{icon(e.get("icon","list-checks"),50,"#1f6b45")}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    head = f'<div class="lhead">{icon(e.get("icon","list-checks"),50,TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
     return (f'<div class="card lcard" id="{e["id"]}">{head}{items}</div>'), 960, (90 if e.get("title") else 30) + 84 * len(e["items"]) + 40
 
 def el_arrow(e):
     lab = f'<div class="alab" id="{e["id"]}-lab">{H.escape(e.get("label",""))}</div>' if e.get("label") else ""
-    col = e.get("color", "#1fbf6a")
+    col = e.get("color", TP["camino"])
     return (f'<div class="arrow" id="{e["id"]}"><svg width="60" height="110" viewBox="0 0 60 110" style="overflow:visible"><path id="{e["id"]}-p" d="M30 0 L30 92" stroke="{col}" stroke-width="10" stroke-linecap="round"/><path id="{e["id"]}-h" d="M10 78 L30 104 L50 78" stroke="{col}" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{lab}</div>'), 600, 110
 
 def el_flow(e):
@@ -138,12 +145,13 @@ def el_flow(e):
         ic = icon(it["icon"], 64, fg) if it.get("icon") else ""
         parts.append(f'<div class="fbox" id="{it["id"]}" style="background:{bg};color:{fg}">{ic}<span>{H.escape(it["text"])}</span>{SK}</div>')
         if k < len(e["items"]) - 1:
-            parts.append(f'<div class="farrow" id="{e["id"]}-a{k}">{icon("arrow-right",56,"#9aa8a0")}</div>')
-    return f'<div class="flow" id="{e["id"]}">{"".join(parts)}</div>', 980, 190
+            parts.append(f'<div class="farrow" id="{e["id"]}-a{k}">{icon("arrow-right",56,TP["flecha"])}</div>')
+    ancho = sum(max(220, len(it["text"]) * 24 + 40) + 76 for it in e["items"]) - 76   # misma cuenta que compile.py
+    return f'<div class="flow" id="{e["id"]}">{"".join(parts)}</div>', min(980, ancho), 190
 
 def el_big(e):
     fs = e.get("fs", 110)
-    col = e.get("color", "#f4f7f5")
+    col = TP["big"] if e.get("color") in (None, "#1fbf6a", "#f4f7f5") else e["color"]
     return f'<div class="bigt" id="{e["id"]}" style="font-size:{fs}px;color:{col}">{e["text"]}{SK}</div>', 980, int(fs * 1.25)
 
 def el_row(e):
@@ -155,18 +163,109 @@ def el_row(e):
 
 def el_spacer(e): return f'<div id="{e["id"]}"></div>', 10, e.get("h", 20)
 
+def el_counter(e):
+    # dígitos en rodillo: cada dígito es una columna 0-9 que gira hasta su valor
+    bg, fg = KIND[e.get("kind", "white")]
+    fs = 150; digs = ""
+    for ch in str(e["value"]):
+        if ch.isdigit():
+            col = "".join(f"<span>{d}</span>" for d in range(10))
+            digs += f'<span class="dg" data-d="{ch}" style="height:{fs}px"><span class="dcol">{col}</span></span>'
+        else:
+            digs += f'<span class="dsep">{H.escape(ch)}</span>'
+    lab = f'<div class="clab">{H.escape(e["label"])}</div>' if e.get("label") else ""
+    w = min(980, max(420, int(len(str(e["value"])) * fs * 0.62) + 120))
+    return (f'<div class="counter" id="{e["id"]}" style="background:{bg};color:{fg};font-size:{fs}px">'
+            f'<div class="digits">{digs}</div>{lab}{SK}</div>'), w, fs + (90 if lab else 50)
+
+def el_chart(e):
+    bars = e["bars"]; mx = max(v for _, v in bars) or 1; unit = H.escape(e.get("unit", ""))
+    rows = ""
+    for i, (lab, v) in enumerate(bars):
+        val = f"{v:g}{unit}"
+        rows += (f'<div class="bar" id="{e["id"]}-b{i}"><span class="blab">{H.escape(str(lab))}</span>'
+                 f'<span class="btrack"><span class="bfill" style="width:{100 * v / mx:.1f}%"></span></span>'
+                 f'<span class="bval">{val}</span></div>')
+    head = f'<div class="chead">{icon(e.get("icon", "chart-bar"), 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    return f'<div class="card chart" id="{e["id"]}">{head}<div class="bars">{rows}</div></div>', 960, (110 if head else 40) + 96 * len(bars) + 30
+
+def el_formula(e):
+    # KaTeX la dibuja en el navegador (reproductor.py); acá se reserva el lugar
+    tex = e["tex"]; fs = 64
+    alta = 2.7 if re.search(r"\\(frac|dfrac|sum|int|prod|sqrt|lim|binom|begin)", tex) else 1.7
+    lab = f'<div class="flab">{H.escape(e["label"])}</div>' if e.get("label") else ""
+    w = min(960, max(360, int(len(re.sub(r"\\[a-zA-Z]+|[{}^_]", "", tex)) * fs * 0.55) + 120))
+    return (f'<div class="formula" id="{e["id"]}" style="font-size:{fs}px"><div class="ftex" data-tex="{H.escape(tex)}">'
+            f'{H.escape(tex)}</div>{lab}{SK}</div>'), w, int(fs * alta) + 56 + (60 if lab else 0)
+
+VENN = {   # centros de los círculos y dónde va el texto de cada región (radio 210)
+    2: {"c": [(-115, 0), (115, 0)], "pos": {"1": (-200, 0), "2": (200, 0), "12": (0, 0), "0": (330, -230)},
+        "nom": [(-200, -235), (200, -235)], "h": 560},
+    3: {"c": [(-115, -85), (115, -85), (0, 110)],
+        "pos": {"1": (-215, -140), "2": (215, -140), "3": (0, 225), "12": (0, -150), "13": (-120, 55),
+                "23": (120, 55), "123": (0, -20), "0": (330, -310)},
+        "nom": [(-250, -310), (250, -310), (0, 360)], "h": 760},
+}
+
+def el_venn(e):
+    n = len(e["sets"]); g = VENN[n]; W_, H_ = 780, g["h"]; cx, cy = W_ / 2, H_ / 2
+    vid = e["id"]; r = 210
+    defs, regs, labs = [], [], []
+    for i, (x, y) in enumerate(g["c"]):
+        defs.append(f'<clipPath id="{vid}-c{i}"><circle cx="{cx+x}" cy="{cy+y}" r="{r}"/></clipPath>')
+    for code, (lx, ly) in g["pos"].items():
+        dentro = [int(ch) - 1 for ch in code if ch != "0"]
+        fuera = [i for i in range(n) if i not in dentro]
+        defs.append(f'<mask id="{vid}-m{code}"><rect width="{W_}" height="{H_}" fill="#fff"/>'
+                    + "".join(f'<circle cx="{cx+g["c"][i][0]}" cy="{cy+g["c"][i][1]}" r="{r}" fill="#000"/>' for i in fuera)
+                    + '</mask>')
+        forma = f'<rect width="{W_}" height="{H_}" rx="40"/>'
+        for i in dentro:
+            forma = f'<g clip-path="url(#{vid}-c{i})">{forma}</g>'
+        regs.append(f'<g id="{vid}-{code}" class="vreg" mask="url(#{vid}-m{code})" fill="{TP["region"]}" opacity="0">{forma}</g>')
+        txt = H.escape(str((e.get("labels") or {}).get(code, "")))
+        labs.append(f'<text id="{vid}-{code}-t" class="vlab" x="{cx+lx}" y="{cy+ly}" text-anchor="middle" dominant-baseline="central">{txt}</text>')
+    circ = "".join(f'<circle class="vcir" cx="{cx+x}" cy="{cy+y}" r="{r}"/>' for x, y in g["c"])
+    noms = "".join(f'<text class="vnom" x="{cx+x}" y="{cy+y}" text-anchor="middle">{H.escape(s)}</text>'
+                   for (x, y), s in zip(g["nom"], e["sets"]))
+    head = f'<div class="chead">{icon("list-checks", 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    svg = (f'<svg viewBox="0 0 {W_} {H_}" width="{W_}" height="{H_}"><defs>{"".join(defs)}</defs>'
+           f'<rect class="vuni" x="4" y="4" width="{W_-8}" height="{H_-8}" rx="40"/>{"".join(regs)}{circ}{noms}{"".join(labs)}</svg>')
+    return f'<div class="card venn" id="{vid}">{head}<div class="vbox">{svg}</div></div>', 860, H_ + (110 if head else 40)
+
+def el_countdown(e):
+    seg = e.get("seconds", 3)
+    nums = "".join(f'<span class="cdn" id="{e["id"]}-n{k}">{k}</span>' for k in range(seg, 0, -1))
+    return (f'<div class="countdown" id="{e["id"]}" data-s="{seg}"><svg class="cdr" viewBox="0 0 200 200">'
+            f'<circle cx="100" cy="100" r="88"/><circle class="cdp" id="{e["id"]}-p" cx="100" cy="100" r="88"/></svg>{nums}</div>'), 300, 300
+
+def el_chat(e):
+    msgs = ""
+    for i, (lado, txt) in enumerate(e["msgs"]):
+        msgs += (f'<div class="msg {lado}" id="{e["id"]}-m{i}"><span class="dots"><i></i><i></i><i></i></span>'
+                 f'<span class="mtxt">{H.escape(txt)}</span></div>')
+    head = f'<div class="chathead">{icon("users", 44, "#ffffff")}<span>{H.escape(e.get("title", "Chat"))}</span></div>'
+    return f'<div class="card chat" id="{e["id"]}">{head}<div class="msgs">{msgs}</div></div>', 960, 110 + 118 * len(e["msgs"]) + 30
+
 MAKERS = {"table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
-          "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer}
+          "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer,
+          "counter": el_counter, "chart": el_chart, "chat": el_chat, "formula": el_formula, "venn": el_venn, "countdown": el_countdown}
 
 # ---------- estaciones ----------
 STATIONS = list(SPEC.STATIONS)
 FINAL = SPEC.FINAL
 final_items = [(lid, html_, None) for (lid, html_, _) in FINAL["lines"]]
 STATIONS.append([
-    {"type": "list", "id": "fcard", "title": "EN LA DEFENSA", "icon": "seal-check", "items": [(lid, html_) for (lid, html_, _) in FINAL["lines"]]},
+    {"type": "list", "id": "fcard", "title": FINAL.get("title", "PARA EXPLICARLO"), "icon": "seal-check", "items": [(lid, html_) for (lid, html_, _) in FINAL["lines"]]},
     {"type": "dialog", "id": "fpro", "char": "pro", "text": FINAL.get("say", "Decilo así"), "kind": "good"},
     {"type": "chip", "id": "fnext", "text": FINAL.get("next_label", "Mañana: " + FINAL["next"]), "kind": "neutral", "icon": "calendar-check", "fs": 44},
 ])
+# los bloques con métodos que no salen del material llevan una etiqueta que lo dice
+for si, gen in enumerate(getattr(SPEC, "GENERAL", [])):
+    if gen and si < len(STATIONS) - 1:
+        _txt_general = {"es": "método general · no está en tu material", "en": "general method · not in your material"}
+        STATIONS[si] = [{"type": "chip", "id": f"gen{si}", "text": _txt_general.get(getattr(SPEC, "IDIOMA", "es"), _txt_general["es"]),
+                         "kind": "neutral", "icon": "lightning", "fs": 32, "gap": 24}] + list(STATIONS[si])
 GAP_Y = 520
 station_html = []; boxes = []
 y = 300
@@ -192,7 +291,7 @@ paths = []
 for i in range(len(boxes) - 1):
     a, b = boxes[i], boxes[i + 1]
     y0 = a["top"] + a["h"] + 40; y1 = b["top"] - 40
-    paths.append(f'<path id="pth{i}" d="M{a["x"]} {y0} C{a["x"]} {y0+260} {b["x"]} {y1-260} {b["x"]} {y1}" stroke="#1fbf6a" stroke-width="12" fill="none" stroke-linecap="round"/>')
+    paths.append(f'<path id="pth{i}" d="M{a["x"]} {y0} C{a["x"]} {y0+260} {b["x"]} {y1-260} {b["x"]} {y1}" stroke="{TP["camino"]}" stroke-width="12" fill="none" stroke-linecap="round"/>')
 WORLD_H = y + 400
 
 # ---------- eventos ----------
@@ -224,6 +323,12 @@ def collect(e, si):
             elif isinstance(it, (list, tuple)): owner[it[0]] = si
     if e["type"] == "console":
         for i in range(len(e["lines"])): owner[f'{e["id"]}-l{i}'] = si
+    if e["type"] == "chart":
+        for i in range(len(e["bars"])): owner[f'{e["id"]}-b{i}'] = si
+    if e["type"] == "chat":
+        for i in range(len(e["msgs"])): owner[f'{e["id"]}-m{i}'] = si
+    if e["type"] == "venn":
+        for code in VENN[len(e["sets"])]["pos"]: owner[f'{e["id"]}-{code}'] = si
 for si, st in enumerate(STATIONS):
     for e in st: collect(e, si)
 
@@ -239,7 +344,22 @@ for si in range(1, len(STATIONS)):
     t0 = enter[si]
     p = phrase_of(t0)
     start = max(min(t0 - 0.35, (p["start"] if p else t0) - 0.25), t0 - 1.0)
+    if p and p["i"] > 0:                       # no salir antes de que termine la frase anterior
+        start = max(start, phrases[p["i"] - 1]["end"] + 0.35)
     travel[si] = round(max(start, 0.5), 3)
+
+# lo que aparece muy poco antes de que la cámara se vaya de su escena casi no se ve
+avisos = []
+for e in EV:
+    si = owner[e["id"]]
+    if e["a"] != "show" or si >= len(STATIONS) - 1:
+        continue
+    visible = travel[si + 1] - e["t"]
+    if visible < 1.2:
+        avisos.append({"id": e["id"], "t": e["t"], "visible": round(visible, 2),
+                       "msg": f"«{e['id']}» aparece {max(0, visible):.1f} s antes de que la cámara cambie de escena: "
+                              "adelantá su {show} o agregá una frase corta después"})
+json.dump(avisos, open(f"{HERE}/avisos.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 # hidden by default: todo lo que aparece por evento show / type
 hidden = sorted({e["id"] for e in EV if e["a"] in ("show",)})
@@ -301,24 +421,26 @@ for e in EV:
     elif e["a"] in ("good",): sfx("click.mp3", t, 0.35)
     elif e["a"] == "strike": sfx("click-soft.mp3", t, 0.45)
 
-STATE = {"D": D, "boxes": boxes, "EV": EV, "travel": travel, "hidden": hidden, "words": words, "phrases": phrases,
+STATE = {"C": TEMA["c"], "D": D, "boxes": boxes, "EV": EV, "travel": travel, "hidden": hidden, "words": words, "phrases": phrases,
          "chars": [e["id"] + "-c" for st in STATIONS for e in st if e["type"] == "dialog"],
          "charStation": {e["id"] + "-c": si for si, st in enumerate(STATIONS) for e in st if e["type"] == "dialog"},
          "enter": enter, "nst": len(STATIONS), "stEls": [[e["id"] for e in st] for st in STATIONS]}
 
 CSS = open(CFG["css"], encoding="utf-8").read()
+if TEMA.get("css"):
+    CSS += "\n" + open(os.path.join(os.path.dirname(_ruta_tema), TEMA["css"]), encoding="utf-8").read()
 HTML = f"""<!doctype html>
-<html lang="es"><head><meta charset="UTF-8" /><meta name="viewport" content="width=1080, height=1920" />
+<html lang="{getattr(SPEC, 'IDIOMA', 'es')}"><head><meta charset="UTF-8" /><meta name="viewport" content="width=1080, height=1920" />
 <script src="assets/gsap.min.js"></script><style>{CSS}</style></head>
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="{D}" data-width="1080" data-height="1920">
 <div id="bg" class="clip" data-start="0" data-duration="{D}" data-track-index="0" data-layout-ignore><div id="grid"></div><div id="glow"></div></div>
 <div id="stage" class="clip" data-start="0" data-duration="{D}" data-track-index="1" data-layout-allow-overflow data-layout-allow-overlap>
 <div id="shake" class="abs" style="left:0;top:0;width:1080px;height:1920px;">
-<div id="world" style="height:{WORLD_H}px">
-<svg class="abs" style="left:0;top:0;overflow:visible" width="2600" height="{WORLD_H}"><path d="M540 -600 L540 260" stroke="#2c4a3a" stroke-width="10" fill="none" stroke-dasharray="4 26" stroke-linecap="round"/>{"".join(paths)}</svg>
+<div id="drift" class="abs" style="left:0;top:0;width:1080px;height:1920px;transform-origin:540px 960px"><div id="world" style="height:{WORLD_H}px">
+<svg class="abs" style="left:0;top:0;overflow:visible" width="2600" height="{WORLD_H}"><path d="M540 -600 L540 260" stroke="{TP['inicio']}" stroke-width="10" fill="none" stroke-dasharray="4 26" stroke-linecap="round"/>{"".join(paths)}</svg>
 {"".join(station_html)}
-</div></div></div>
+</div></div></div></div>
 <div id="caps" class="abs" style="left:0;top:0;width:1080px;height:1920px;pointer-events:none;">
 {chr(10).join(cap_html)}
 </div>

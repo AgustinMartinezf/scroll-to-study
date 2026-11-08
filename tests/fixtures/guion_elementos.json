@@ -1,0 +1,18 @@
+{
+ "bloques": [
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "chat", "id": "ch", "title": "Grupo del obligatorio", "msgs": [["a", "¿Por qué la multa no apunta al socio?"], ["b", "Porque ya lo sabe el préstamo"]]}
+   ],
+   "frases": ["{show ch}¿Por qué la multa no apunta al socio? Te lo {show ch-m1}explico."]},
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "chart", "id": "g", "title": "Caminos de multa a socio", "bars": [["con FK directa", 2], ["en cadena", 1]]}
+   ],
+   "frases": ["Con una FK {show g}directa habría dos {bad g-b0}[-caminos].", "En cadena, hay uno {good g-b1}[+solo]."]},
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "counter", "id": "n", "value": "1452", "label": "código de error", "kind": "white"}
+   ],
+   "frases": ["Y si el préstamo no existe, MySQL tira el {show n}error {boom n +0.6}[-mil] cuatrocientos cincuenta y dos."]}
+ ],
+ "final": {"frases": ["En la [+defensa] decí: {show fl1}una sola cadena.", "{show fnext}Mañana: la PK de ejemplar."],
+  "lineas": ["<b>Una sola cadena</b> de FK"], "mañana": "la PK de ejemplar"}
+}

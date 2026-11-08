@@ -1,0 +1,13 @@
+{
+ "nombre": "Pizarra",
+ "kind": {"good": ["#1fbf6a", "#04170b"], "bad": ["#e5483b", "#ffffff"], "warn": ["#ffcf3f", "#2a2000"],
+          "neutral": ["#2a3340", "#ffffff"], "blue": ["#2f6fe4", "#ffffff"], "white": ["#ffffff", "#121a15"],
+          "purple": ["#7a5af8", "#ffffff"]},
+ "py": {"icoOk": "#13824a", "icoNo": "#c2372b", "cabeza": "#1f6b45", "flecha": "#9aa8a0", "camino": "#1fbf6a",
+        "inicio": "#2c4a3a", "big": "#f4f7f5", "toastBien": "#1fbf6a", "toastMal": "#e5483b", "region": "#1fbf6a"},
+ "c": {"good": "#1fbf6a", "goodInk": "#04170b", "bad": "#e5483b", "badInk": "#ffffff", "hl": "#ffe7a3", "hlInk": "#2a2000",
+       "filaBien": "#d9f5e5", "filaMal": "#fde3df", "celdaBien": "#13824a", "celdaMal": "#c2372b", "regionHl": "#ffcf3f",
+       "subApagado": "rgba(244,247,245,.35)", "subPrendido": "#ffffff", "subClave": "#1fbf6a", "subClaveInk": "#04170b",
+       "subMal": "#e5483b", "subMalInk": "#ffffff"},
+ "css": ""
+}

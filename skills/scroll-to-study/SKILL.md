@@ -1,92 +1,128 @@
 ---
 name: scroll-to-study
-description: Convierte el material de un proyecto universitario (repo, informe, letra del obligatorio) en videos cortos verticales para repasar la defensa oral, con cada dato verificado contra el material. Usar cuando la persona quiera preparar la defensa de su proyecto con videos, o pida inventario, temas o guiones de scroll to study.
+description: Turns study material into short vertical videos with voice, to review one topic a day, with every fact checked against the material. Works to understand your own project (repo, report, assignment brief) or to study a course for an exam (notes, slides, exercises). Use it when the person wants to study or review with videos, or asks for a scroll to study inventory, topics or scripts.
 ---
 
-# Scroll to study: del material a los videos de la defensa
+# Scroll to study: from material to study videos
 
-Vas a producir, junto con la persona (autora del proyecto), entre 8 y 15 videos de 45–60 s que
-preparan la defensa oral. Cada video es un `.html` que se reproduce solo en el navegador, con voz.
+Together with the person, you will produce 8 to 20 videos of 30–60 s, to review one topic a day.
+Each video is a single `.html` file that plays by itself in the browser, with voice.
 
-La regla central: **nada en un video puede afirmar algo que no esté en el material.** Cada dato pasa
-por código que lo verifica: vos escribís los JSON y `s2s.py` los comprueba. Nunca des por buena una
-etapa sin correr su comprobación, y nunca edites a mano lo que el script calcula.
+There are two modes, and the first step is to know which one applies:
+- **proyecto** (project): something the person made (an assignment, a work project). They know the
+  material and can confirm doubtful facts.
+- **materia** (course): they study for an exam with notes, slides or a book. They cannot tell whether
+  a fact is true, so whatever cannot be checked against the material does not go into any video.
 
-Abreviaturas: `S2S` = `python3 ${CLAUDE_SKILL_DIR}/scripts/s2s.py` (en Windows puede ser `python`
-en vez de `python3`). `T` = la carpeta de trabajo: `scroll-to-study/` dentro de la carpeta actual,
-salvo que la persona pida otra. Los prompts están en `${CLAUDE_SKILL_DIR}/prompts/`. Donde un prompt
-diga "respondé solo con el JSON", escribí ese JSON en el archivo indicado.
+And two languages for the videos: **es** (Spanish, the default) and **en** (English). Ask which one
+they want if it is not obvious from how they talk to you. The material can be in either language.
 
-## 0. Preparar (una vez por computadora)
+The central rule: **nothing in a video can state something that is not in the material.** Every fact
+goes through code that checks it: you write the JSON files and `s2s.py` checks them. Never accept a
+stage without running its check, and never hand-edit what the script computes.
+
+Abbreviations: `S2S` = `python3 ${CLAUDE_SKILL_DIR}/scripts/s2s.py` (on Windows it may be `python`
+instead of `python3`). `T` = the working folder: `scroll-to-study/` inside the current folder, unless
+the person asks for another one. The prompts are in `${CLAUDE_SKILL_DIR}/prompts/`. Where a prompt
+says "write ONLY the JSON", write that JSON to the file given.
+
+Talk to the person in their language. The commands and JSON keys are in Spanish; that is expected.
+
+## 0. Set up (once per computer)
 
     python3 -m pip install -r ${CLAUDE_SKILL_DIR}/requirements.txt
-    S2S instalar
+    S2S instalar --idioma es        # or --idioma en
 
-`instalar` baja la voz (Piper, unos 65 MB) y gsap a una carpeta de datos y prueba que la voz ande.
-Si falla, mostrá el error a la persona; no sigas a las etapas de video sin esto (las de guion sí
-funcionan sin la voz).
+`instalar` downloads the voice for that language (Piper, about 65 MB), gsap and KaTeX to a data
+folder and checks that the voice works. Run it again with the other language if they want videos in
+both. If it fails, show the error to the person; do not go on to the video stage without it (the
+script stages work without the voice).
 
 ## 1. Material
 
-Preguntá dónde está el código del proyecto (carpeta o .zip), el informe y, si existe, la letra o
-rúbrica del obligatorio. Después:
+Ask what they are going to study and where the material is. In project mode: the code (folder or
+.zip), the report and the assignment brief or rubric if there is one. In course mode: notes, slides,
+worked exercises and, if they exist, the course syllabus or past exams. Then:
 
-    S2S corpus -t T --repo RUTA_DEL_REPO --doc informe.pdf --doc letra.pdf
+    S2S corpus -t T --modo proyecto --idioma en --repo PATH_TO_REPO --doc report.pdf --doc brief.pdf
+    S2S corpus -t T --modo materia --idioma es --doc theory.pdf --doc exercises.pdf
 
-Si avisa que el material es muy grande, preguntá qué carpetas importan para la defensa.
+Optional: `--estilo cuaderno` (notebook paper, the default) or `--estilo pizarra` (dark board) sets
+how every video looks.
 
-## 2. Inventario de afirmaciones
+If it warns that the material is too large, ask which folders or chapters matter.
 
-Seguí `prompts/inventario.md` leyendo `T/corpus.txt` completo (por partes si es largo). Escribí
-`T/inventario.json` con la forma `{"afirmaciones": [{"id","texto","fuente","cita","tipo"}, …]}` y corré
+## 2. Inventory of statements
+
+Follow `prompts/<modo>/inventario.md` reading all of `T/corpus.txt` (in parts if it is long). Write
+`T/inventario.json` as `{"afirmaciones": [{"id","texto","fuente","cita","tipo"}, …]}` and run
 
     S2S verificar -t T
 
-Para cada afirmación en "comprobar", mirá el motivo: si dice dónde aparece la cita, corregí la
-fuente; si la cita no está en el material, buscá la cita textual real o sacá la afirmación. Una sola
-pasada de correcciones y volvé a verificar. Lo que siga en "comprobar" mostráselo a la persona en una
-lista corta: si confirma que es correcto, poné `"aprobado": true` en esa afirmación; si no, sacala.
-Nunca pongas `aprobado` sin que la persona lo diga.
+For each statement in "comprobar", look at the reason: if it says where the quote appears, fix the
+source; if the quote is not in the material, find the real verbatim quote or remove the statement.
+One round of fixes, then verify again. In project mode, show what is still in "comprobar" to the
+person in a short list: if they confirm it is correct, set `"aprobado": true`; if not, remove it.
+Never set `aprobado` unless the person says so. In course mode nothing is approved by hand: whatever
+cannot be verified is removed (and tell the person how many statements were left out).
 
-## 3. Temas (decide la persona)
+If in course mode the material is an exercise sheet without theory, do not solve specific exercises
+(the person solves and checks them on their own). Record each type of exercise as a statement from
+the material and add the general methods and traps to approach it, as `prompts/materia/inventario.md`
+explains. Tell the person those methods do not come from their material and that the videos label
+them as "general method".
 
-Seguí `prompts/temas.md` con el inventario verificado, escribí `T/temas.json`
-(`{"temas": [{"id","titulo","pregunta","afirmaciones"}]}`) y corré `S2S temas -t T`.
-Mostrale la lista (título y pregunta del tribunal) y preguntale qué sacar, agregar o reordenar, y si
-falta algo que el tribunal seguro pregunta. Si falta, puede que no haya afirmaciones que lo
-respalden: decíselo en vez de inventarlo. Aplicá sus cambios y volvé a correr `S2S temas`.
+If the material contradicts itself (for example, a slide's text says the opposite of its figure), do
+not pick a version: leave that statement out and tell the person what you saw and where, so they can
+check it with their teacher.
 
-## 4. Guiones, uno por tema
+## 3. Topics (the person decides)
 
-Para cada tema, en orden:
+Follow `prompts/<modo>/temas.md` with the verified inventory, write `T/temas.json`
+(`{"temas": [{"id","titulo","pregunta","afirmaciones"}]}`) and run `S2S temas -t T`.
+Show them the list (title and question) and ask what to remove, add or reorder, and whether something
+they will surely be asked is missing. If it is missing, there may be no statements that back it: say
+so instead of making it up. Apply their changes and run `S2S temas` again.
 
-1. `S2S pedido -t T --tema t01`. **Esa salida es lo único que podés usar como contenido**: aunque
-   hayas leído todo el material, no agregues nombres, números, motivos ni ejemplos que no estén ahí.
-2. Escribí el guion siguiendo `prompts/guion.md` en `T/t01/guion.json`. Si una palabra del proyecto
-   se pronuncia mal (snake_case, siglas, palabras sin tilde en el código), agregala en `"lexico"`.
-3. `S2S guion -t T --tema t01`. Corregí todo lo marcado `ARREGLAR` y volvé a correr. Tratá también
-   como error los `AVISO` de identificadores o números que no están en las fuentes.
-   `PREGUNTAR` no lo arreglás vos: anotalo para la persona.
-   Si el script dice que no sigas, pasá al tema siguiente y contáselo al final.
+Each video gets a format picked from its statements (pregunta: question and answer with a countdown;
+mito: myth vs fact; avsb: A versus B; pasos: step by step; historia: problem → decision). If the
+person wants a specific format for a topic, add `"formato": "<name>"` to that topic.
 
-Si son muchos temas, hacé de a 3 o 4 y preguntá si seguir. Al terminar, juntá todos los
-`PREGUNTAR` y `[COMPROBAR]` y resolvelos con la persona: ella sabe si el dato es cierto. Con su
-respuesta corregí el guion (o las fuentes) y volvé a validar.
+## 4. Scripts, one per topic
+
+For each topic, in order:
+
+1. `S2S pedido -t T --tema t01`. **That output is the only thing you may use as content**: even if
+   you read the whole material, do not add names, numbers, reasons or examples that are not there.
+   It also says the video language, the format and the closing line.
+2. Write the script following `prompts/guion.md` to `T/t01/guion.json`, in the video language. If a
+   word will be mispronounced (snake_case, acronyms, words without accents in code), add it to
+   `"lexico"`.
+3. `S2S guion -t T --tema t01`. Fix everything marked `ARREGLAR` and run it again. Also treat as
+   errors the `AVISO` lines about identifiers or numbers that are not in the sources.
+   You do not fix `PREGUNTAR`: note it for the person.
+   If the script says not to continue, move on to the next topic and tell them at the end.
+
+If there are many topics, do 3 or 4 at a time and ask whether to continue. When done, gather all
+`PREGUNTAR` and `[COMPROBAR]` notes and resolve them with the person: they know whether the fact is
+true. With their answer, fix the script (or the sources) and validate again.
 
 ## 5. Videos
 
-    S2S videos -t T --titulo "<nombre del proyecto>"
+    S2S videos -t T --titulo "<name of the project or course>"
 
-Genera la voz y la animación de cada guion listo (unos segundos por video) y una lista de
-reproducción en `T/videos/index.html`. Cada video es un único `.html` de ~1 MB que funciona sin
-internet: se puede abrir en la compu o pasar al celular. Para rehacer uno después de cambiar su
-guion: `S2S video -t T --tema t01`. `S2S estado -t T` muestra qué falta.
+It generates the voice and the animation of every finished script (a few seconds per video) and a
+playlist at `T/videos/index.html`. Each video is a single `.html` of about 1 MB that works offline:
+it can be opened on the computer or copied to a phone. To redo one after changing its script:
+`S2S video -t T --tema t01`. `S2S estado -t T` shows what is missing.
+If `video` warns that something appears right before the camera changes scene, move that `{show}`
+earlier in the script or add a short sentence after it, validate again and redo that video.
 
-Al terminar, decí en dos o tres líneas cuántos videos quedaron, cuáles no y por qué, y dónde abrir
-la lista. Sugerí ver uno por día, en orden.
+When done, say in two or three lines how many videos were made, which were not and why, and where to
+open the playlist. Suggest watching one a day, in order.
 
-## Lo que no hacés
-- No escribas spec.json, script.json, gaps.json ni timing.json a mano: los generan los scripts.
-- No cambies tamaños, pausas ni pronunciación en el guion fuera de `"lexico"`: lo calcula el compilador.
-- No uses íconos fuera de la lista de `prompts/guion.md` (el validador los rechaza).
-- No subas el material ni los videos a ningún lado: todo queda en la computadora de la persona.
+## What you do not do
+- Do not write spec.json, script.json, gaps.json or timing.json by hand: the scripts generate them.
+- Do not change sizes, pauses or pronunciation in the script outside `"lexico"`: the compiler computes them.
+- Do not use icons outside the list in `prompts/guion.md` (the validator rejects them).
+- Do not upload the material or the videos anywhere: everything stays on the person's computer.

@@ -24,7 +24,8 @@ def carpeta_datos() -> Path:
 DATOS = carpeta_datos()
 VOZ_DEFECTO = "davefx"
 VOCES = {   # nombre -> carpeta dentro de DATOS/voces, como la publica sherpa-onnx en GitHub
-    "davefx": "vits-piper-es_ES-davefx-medium/es_ES-davefx-medium.onnx",
+    "davefx": "vits-piper-es_ES-davefx-medium/es_ES-davefx-medium.onnx",          # español
+    "hfc_male": "vits-piper-en_US-hfc_male-medium/en_US-hfc_male-medium.onnx",    # inglés (dataset CC BY-NC-SA)
 }
 
 
@@ -36,6 +37,7 @@ def _cargar() -> dict:
         "css": AQUI / "engine.css",
         "js": AQUI / "engine.js",
         "gsap": DATOS / "gsap.min.js",
+        "katex": DATOS / "katex",
         "voces": {n: DATOS / "voces" / r for n, r in VOCES.items()},
     }
     extra = DATOS / "config.json"

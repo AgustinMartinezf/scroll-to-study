@@ -1,0 +1,13 @@
+{
+ "nombre": "Cuaderno",
+ "kind": {"good": ["#2f5bd3", "#ffffff"], "bad": ["#d64545", "#ffffff"], "warn": ["#ffe66d", "#1d2b4f"],
+          "neutral": ["#e9e4d4", "#1d2b4f"], "blue": ["#2f5bd3", "#ffffff"], "white": ["#ffffff", "#1d2b4f"],
+          "purple": ["#6d4fd6", "#ffffff"]},
+ "py": {"icoOk": "#2e8b57", "icoNo": "#d64545", "cabeza": "#2f5bd3", "flecha": "#1d2b4f", "camino": "#2f5bd3",
+        "inicio": "#9fb3d9", "big": "#1d2b4f", "toastBien": "#2e8b57", "toastMal": "#d64545", "region": "#2f5bd3"},
+ "c": {"good": "#2e8b57", "goodInk": "#ffffff", "bad": "#d64545", "badInk": "#ffffff", "hl": "#ffe66d", "hlInk": "#1d2b4f",
+       "filaBien": "#dcefe3", "filaMal": "#f8dcdc", "celdaBien": "#2e8b57", "celdaMal": "#d64545", "regionHl": "#ffe66d",
+       "subApagado": "rgba(29,43,79,.35)", "subPrendido": "#1d2b4f", "subClave": "#ffe66d", "subClaveInk": "#1d2b4f",
+       "subMal": "#f8b4ab", "subMalInk": "#1d2b4f"},
+ "css": "cuaderno.css"
+}
