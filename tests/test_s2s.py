@@ -22,15 +22,15 @@ def _zip_fixture(destino: Path) -> Path:
 def t(tmp_path):
     t = tmp_path / "trabajo"
     assert s2s.main(["corpus", "-t", str(t), "--repo", str(_zip_fixture(tmp_path))]) == 0
-    (t / "inventario.json").write_text(json.dumps(INVENTARIO))
+    (t / "inventario.json").write_text(json.dumps(INVENTARIO), encoding="utf-8")
     assert s2s.main(["verificar", "-t", str(t)]) == 0
-    (t / "temas.json").write_text(json.dumps(TEMAS))
+    (t / "temas.json").write_text(json.dumps(TEMAS), encoding="utf-8")
     assert s2s.main(["temas", "-t", str(t)]) == 0
     return t
 
 
 def _inv(t):
-    return {a["id"]: a for a in json.loads((t / "inventario.json").read_text())["afirmaciones"]}
+    return {a["id"]: a for a in json.loads((t / "inventario.json").read_text(encoding="utf-8"))["afirmaciones"]}
 
 
 def test_zip_como_repo_y_corpus_numerado(t):
@@ -48,16 +48,16 @@ def test_verificacion_mecanica(t):
 
 
 def test_aprobado_a_mano_deja_el_motivo_a_la_vista(t):
-    p = t / "inventario.json"; inv = json.loads(p.read_text())
+    p = t / "inventario.json"; inv = json.loads(p.read_text(encoding="utf-8"))
     inv["afirmaciones"][6]["aprobado"] = True                               # A7
-    p.write_text(json.dumps(inv))
+    p.write_text(json.dumps(inv), encoding="utf-8")
     s2s.main(["verificar", "-t", str(t)])
     a7 = _inv(t)["A7"]
     assert a7["estado"] == "ok" and a7["motivos"]
 
 
 def test_temas_sacan_afirmaciones_sin_verificar(t):
-    temas = json.loads((t / "temas.json").read_text())
+    temas = json.loads((t / "temas.json").read_text(encoding="utf-8"))
     assert temas["temas"][0]["afirmaciones"] == ["A1", "A2", "A3", "A4"] and temas["sin_cubrir"] == []
 
 
@@ -71,21 +71,21 @@ def test_guion_cuenta_intentos_y_separa_errores(t, capsys):
     d = t / "t01"; d.mkdir()
     malo = guion_bueno(); malo["bloques"][0]["frases"][0] = "Hola {volar m}mundo."
     malo["bloques"][3]["fuentes"] = ["A5"]
-    (d / "guion.json").write_text(json.dumps(malo))
+    (d / "guion.json").write_text(json.dumps(malo), encoding="utf-8")
     assert s2s.main(["guion", "-t", str(t), "--tema", "t01"]) == 1
     out = capsys.readouterr().out
     assert "ARREGLAR   " in out and "acción desconocida" in out
     assert "PREGUNTAR " in out and "A5 está para comprobar" in out
-    (d / "guion.json").write_text(json.dumps(guion_bueno()))
+    (d / "guion.json").write_text(json.dumps(guion_bueno()), encoding="utf-8")
     assert s2s.main(["guion", "-t", str(t), "--tema", "t01"]) == 0
-    assert json.loads((d / "reporte.json").read_text())["intentos"] == 2
+    assert json.loads((d / "reporte.json").read_text(encoding="utf-8"))["intentos"] == 2
     assert all((d / f).exists() for f in ("spec.json", "script.json", "gaps.json"))
 
 
 def test_avisa_datos_que_no_estan_en_las_fuentes(t):
-    d = t / "t01"; d.mkdir(); (d / "guion.json").write_text(json.dumps(guion_bueno()))
+    d = t / "t01"; d.mkdir(); (d / "guion.json").write_text(json.dumps(guion_bueno()), encoding="utf-8")
     s2s.main(["guion", "-t", str(t), "--tema", "t01"])
-    avisos = json.loads((d / "reporte.json").read_text())["avisos"]
+    avisos = json.loads((d / "reporte.json").read_text(encoding="utf-8"))["avisos"]
     assert any("1452" in a for a in avisos)          # el código de error no sale del material
 
 
@@ -93,21 +93,21 @@ def test_icono_fuera_de_la_lista(t):
     d = t / "t01"; d.mkdir(); g = guion_bueno()
     g["bloques"][0]["elementos"].append({"type": "chip", "id": "zz", "text": "x", "icon": "rocket"})
     g["bloques"][0]["frases"][0] = "{show zz}" + g["bloques"][0]["frases"][0]
-    (d / "guion.json").write_text(json.dumps(g))
+    (d / "guion.json").write_text(json.dumps(g), encoding="utf-8")
     assert s2s.main(["guion", "-t", str(t), "--tema", "t01"]) == 1
-    assert any("rocket" in e for e in json.loads((d / "reporte.json").read_text())["errores"])
+    assert any("rocket" in e for e in json.loads((d / "reporte.json").read_text(encoding="utf-8"))["errores"])
 
 
 def test_aviso_al_tercer_intento(t, capsys):
     d = t / "t01"; d.mkdir(); g = guion_bueno(); g["bloques"][0]["frases"][0] = "Hola {volar m}mundo."
-    (d / "guion.json").write_text(json.dumps(g))
+    (d / "guion.json").write_text(json.dumps(g), encoding="utf-8")
     for _ in range(3):
         s2s.main(["guion", "-t", str(t), "--tema", "t01"])
     assert "no sigas corrigiendo" in capsys.readouterr().out
 
 
 def test_registro(t):
-    cmds = [json.loads(l)["cmd"] for l in (t / "registro.jsonl").read_text().splitlines()]
+    cmds = [json.loads(l)["cmd"] for l in (t / "registro.jsonl").read_text(encoding="utf-8").splitlines()]
     assert cmds == ["corpus", "verificar", "temas"]
 
 
@@ -130,11 +130,11 @@ def test_modo_materia_no_deja_aprobar_y_cambia_el_pedido(tmp_path, capsys):
     t = tmp_path / "trabajo"
     s2s.main(["corpus", "-t", str(t), "--modo", "materia", "--repo", str(FIX)])
     inv = json.loads(json.dumps(INVENTARIO)); inv["afirmaciones"][6]["aprobado"] = True     # A7
-    (t / "inventario.json").write_text(json.dumps(inv))
+    (t / "inventario.json").write_text(json.dumps(inv), encoding="utf-8")
     s2s.main(["verificar", "-t", str(t)])
     assert "no se aprueba a mano" in capsys.readouterr().out
     assert _inv(t)["A7"]["estado"] == "comprobar"
-    (t / "temas.json").write_text(json.dumps(TEMAS)); s2s.main(["temas", "-t", str(t)])
+    (t / "temas.json").write_text(json.dumps(TEMAS), encoding="utf-8"); s2s.main(["temas", "-t", str(t)])
     capsys.readouterr()
     s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
     out = capsys.readouterr().out
@@ -142,9 +142,9 @@ def test_modo_materia_no_deja_aprobar_y_cambia_el_pedido(tmp_path, capsys):
 
 
 def test_titulo_del_cierre_segun_el_modo(t):
-    d = t / "t01"; d.mkdir(); (d / "guion.json").write_text(json.dumps(guion_bueno()))
+    d = t / "t01"; d.mkdir(); (d / "guion.json").write_text(json.dumps(guion_bueno()), encoding="utf-8")
     s2s.main(["guion", "-t", str(t), "--tema", "t01"])
-    assert json.loads((d / "spec.json").read_text())["FINAL"]["title"] == "PARA EXPLICARLO"
+    assert json.loads((d / "spec.json").read_text(encoding="utf-8"))["FINAL"]["title"] == "PARA EXPLICARLO"
 
 
 GENERALES = [
@@ -161,7 +161,7 @@ def _con_generales(tmp_path, modo):
     inv = json.loads(json.dumps(INVENTARIO))
     inv["afirmaciones"][0]["tipo"] = "ejercicio"                       # A1 hace de ejercicio del material
     inv["afirmaciones"] += json.loads(json.dumps(GENERALES))
-    (t / "inventario.json").write_text(json.dumps(inv))
+    (t / "inventario.json").write_text(json.dumps(inv), encoding="utf-8")
     s2s.main(["verificar", "-t", str(t)])
     return t
 
@@ -183,15 +183,15 @@ def test_tema_y_video_marcan_lo_general(tmp_path, capsys):
     t = _con_generales(tmp_path, "materia")
     (t / "temas.json").write_text(json.dumps({"temas": [
         {"id": "t01", "titulo": "Uno", "pregunta": "¿?", "afirmaciones": ["A1", "G1"]},
-        {"id": "t02", "titulo": "Dos", "pregunta": "¿?", "afirmaciones": ["G1"]}]}))
+        {"id": "t02", "titulo": "Dos", "pregunta": "¿?", "afirmaciones": ["G1"]}]}), encoding="utf-8")
     s2s.main(["temas", "-t", str(t)])
     assert "t02: solo tiene métodos generales" in capsys.readouterr().out
     s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
     assert "G1 (método general, NO está en el material)" in capsys.readouterr().out
     d = t / "t01"; d.mkdir(); g = guion_bueno(); g["bloques"][1]["fuentes"] = ["G1"]
-    (d / "guion.json").write_text(json.dumps(g))
+    (d / "guion.json").write_text(json.dumps(g), encoding="utf-8")
     assert s2s.main(["guion", "-t", str(t), "--tema", "t01"]) == 0
-    assert json.loads((d / "spec.json").read_text())["GENERAL"] == [False, True, False, False]
+    assert json.loads((d / "spec.json").read_text(encoding="utf-8"))["GENERAL"] == [False, True, False, False]
 
 
 def test_formato_segun_el_contenido():
@@ -206,8 +206,8 @@ def test_formato_segun_el_contenido():
 def test_pedido_en_ingles(tmp_path, capsys):
     t = tmp_path / "en"
     s2s.main(["corpus", "-t", str(t), "--idioma", "en", "--repo", str(FIX)])
-    (t / "inventario.json").write_text(json.dumps(INVENTARIO)); s2s.main(["verificar", "-t", str(t)])
-    (t / "temas.json").write_text(json.dumps(TEMAS)); s2s.main(["temas", "-t", str(t)])
+    (t / "inventario.json").write_text(json.dumps(INVENTARIO), encoding="utf-8"); s2s.main(["verificar", "-t", str(t)])
+    (t / "temas.json").write_text(json.dumps(TEMAS), encoding="utf-8"); s2s.main(["temas", "-t", str(t)])
     capsys.readouterr()
     s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
     out = capsys.readouterr().out
