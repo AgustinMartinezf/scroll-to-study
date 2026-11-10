@@ -42,7 +42,7 @@ show, hide, hl (highlight), good / bad (green / red with a shake), send (a packe
 - chip: id, text (≤ ~40 characters), kind (good, bad, warn, neutral, blue, white, purple), optional icon, mono true for code, optional alt + altkind for swap.
 - toast: id, text (console-like error, ≤ ~35 characters), kind "bad" or "good".
 - dialog: id, char (novato, pro, admin, estudiante, docente), text (short bubble).
-- console: id, lines [..], optional title. Use with type.
+- console: id, lines [..] (each line up to 34 characters: split long commands), optional title. Use with type.
 - list: id, optional title, items [[id, html], …]. html allows <b> (green) and <em> (red).
 - arrow: id, optional label.
 - flow: id, items [{id, text, icon?, kind?}] — at most 4 boxes with short text.

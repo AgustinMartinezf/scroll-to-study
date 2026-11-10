@@ -91,6 +91,7 @@ PLAYER_JS = """
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === "suspended") await ctx.resume();
     if (!buffer) { boton.textContent = TX.cargando; buffer = await decodificar(); }
+    if (sonando) return;   // la lista y un toque pueden pedirlo a la vez
     if (pos >= D - 0.05) pos = 0;
     fuente = ctx.createBufferSource(); fuente.buffer = buffer; fuente.connect(ctx.destination);
     fuente.onended = () => { if (sonando && ahora() >= D - 0.1) terminar(); };
@@ -103,10 +104,13 @@ PLAYER_JS = """
     pos = ahora(); sonando = false; try { fuente.stop(); } catch (e) {}
     boton.textContent = TX.seguir; tapa.hidden = false; avisar("pausa");
   });
+  // la lista de reproducción (index.html) pide arrancar el siguiente video; si el navegador exige un toque, queda la tapa
+  addEventListener("message", e => { if (e.data && e.data.s2s === "play" && !sonando) reproducir().catch(() => {}); });
   addEventListener("resize", encajar);
   encajar(); pintar(0);
   window.__s2s = { pintar, D, ahora, reproducir };   // para pruebas
   document.documentElement.dataset.s2sListo = "1";
+  avisar("listo");
 })();
 """
 
@@ -206,44 +210,147 @@ def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
     return destino
 
 
-INDICE = """<!doctype html>
-<html lang="{idioma}"><head><meta charset="UTF-8">
+INDICE = r"""<!doctype html>
+<html lang="__IDIOMA__"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{titulo}</title>
+<title>__TITULO__</title>
 <style>
-:root {{ --bg:#0a0e0c; --fg:#eef3f0; --muted:#8fa197; --accent:#1fbf6a; --line:#1e2a23; color-scheme:dark; }}
-* {{ box-sizing:border-box; margin:0; }}
-body {{ background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, sans-serif;
-  padding:max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }}
-main {{ max-width:560px; margin:0 auto; display:grid; gap:18px; }}
-h1 {{ font-size:22px; line-height:1.2; text-wrap:balance; }}
-p.sub {{ color:var(--muted); font-size:14px; }}
-ol {{ list-style:none; padding:0; display:grid; gap:8px; counter-reset:n; }}
-li a {{ display:grid; grid-template-columns:2.2em 1fr auto; align-items:center; gap:10px; padding:14px;
-  border:1px solid var(--line); border-radius:12px; color:inherit; text-decoration:none; }}
-li a:hover, li a:focus-visible {{ border-color:var(--accent); outline:none; }}
-li a::before {{ counter-increment:n; content:counter(n); font-variant-numeric:tabular-nums; color:var(--accent); font-weight:700; }}
-.preg {{ color:var(--muted); font-size:13px; display:block; }}
-.dur {{ color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }}
-</style></head><body><main>
-<h1>{titulo}</h1>
-<p class="sub">{sub}</p>
-<ol>
-{items}
-</ol>
-</main></body></html>
+:root { --bg:#f6f1e3; --card:#fffdf6; --line:#d9cfb4; --fg:#1d2b4f; --muted:#5f6a86; --accent:#2f5bd3;
+  --ok:#1f8f52; --ok-ink:#fff; color-scheme:light; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding:20px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left)); }
+.wrap { max-width:1040px; margin:0 auto; display:grid; gap:20px; grid-template-columns:1fr; }
+@media (min-width:860px) { .wrap { grid-template-columns:minmax(0,400px) minmax(0,1fr); align-items:start; }
+  .player { position:sticky; top:20px; } }
+header { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:12px 24px; align-items:flex-end; justify-content:space-between; }
+h1 { font:800 clamp(24px,5vw,36px)/1.1 system-ui, sans-serif; margin:0; letter-spacing:-.01em; }
+.sub { color:var(--muted); margin:6px 0 0; max-width:60ch; }
+.hoy { color:var(--muted); font-size:13px; text-align:right; }
+.hoy b { display:block; font:800 28px system-ui, sans-serif; color:var(--fg); font-variant-numeric:tabular-nums; }
+.barra { grid-column:1/-1; height:8px; border-radius:4px; background:var(--line); overflow:hidden; }
+.barra i { display:block; height:100%; width:0; background:var(--ok); transition:width .3s; }
+.player { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.caja { width:100%; max-width:400px; aspect-ratio:9/16; margin:0 auto; border-radius:18px; overflow:hidden;
+  background:#000; border:1px solid var(--line); }
+.caja iframe { width:100%; height:100%; border:0; display:block; }
+.ahora small { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+.ahora span { font-weight:700; font-size:17px; }
+.ctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+button { font:600 14px system-ui, sans-serif; color:var(--fg); background:var(--card); border:1px solid var(--line);
+  border-radius:10px; padding:9px 14px; cursor:pointer; }
+button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+button.prim { background:var(--accent); border-color:var(--accent); color:#fff; }
+ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; min-width:0; }
+li button { width:100%; display:grid; grid-template-columns:32px minmax(0,1fr) auto; gap:12px; align-items:center;
+  text-align:left; padding:12px 14px; border-radius:14px; }
+.num { text-align:center; color:var(--muted); font-weight:700; }
+.t b { display:block; font-size:16px; }
+.t span { display:block; color:var(--muted); font-size:13px; font-weight:400; margin-top:2px; }
+.dur { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+li.cur button { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; height:28px; display:flex;
+  align-items:center; justify-content:center; }
+@media (prefers-reduced-motion:reduce) { .barra i { transition:none; } }
+</style></head><body>
+<div class="wrap">
+  <header>
+    <div><h1>__TITULO__</h1><p class="sub">__SUB__</p></div>
+    <div class="hoy"><b id="nHoy">0 / 0</b><span id="lHoy"></span></div>
+  </header>
+  <div class="barra" aria-hidden="true"><i id="lleno"></i></div>
+  <section class="player">
+    <div class="caja"><iframe id="v" allow="autoplay" title="video"></iframe></div>
+    <div class="ahora"><small id="nAhora"></small><span id="tAhora"></span></div>
+    <div class="ctrls">
+      <button id="ant" type="button"></button>
+      <button id="sig" type="button" class="prim"></button>
+      <button id="cero" type="button"></button>
+    </div>
+  </section>
+  <ol id="lista"></ol>
+</div>
+<script>
+const VIDEOS = __VIDEOS__, TX = __TX__;
+const CLAVE = "s2s:" + document.title, hoy = new Date().toLocaleDateString("sv");
+let st = { dia: hoy, vistos: [], cur: 0 };
+try { const s = JSON.parse(localStorage.getItem(CLAVE) || "null"); if (s) { st = s; if (st.dia !== hoy) { st.dia = hoy; st.vistos = []; } } } catch (e) {}
+const guardar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(st)); } catch (e) {} };
+const $ = id => document.getElementById(id), v = $("v");
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+$("ant").textContent = TX.ant; $("sig").textContent = TX.sig; $("cero").textContent = TX.cero; $("lHoy").textContent = TX.hoy;
+function pintar() {
+  const ol = $("lista"); ol.textContent = "";
+  VIDEOS.forEach((x, i) => {
+    const li = document.createElement("li"), b = document.createElement("button");
+    li.classList.toggle("cur", i === st.cur); li.classList.toggle("visto", st.vistos.includes(i));
+    b.type = "button";
+    const n = document.createElement("span"); n.className = "num"; n.textContent = st.vistos.includes(i) ? "✓" : i + 1;
+    const t = document.createElement("span"); t.className = "t";
+    const tb = document.createElement("b"); tb.textContent = x.titulo;
+    const ts = document.createElement("span"); ts.textContent = x.pregunta; t.append(tb, ts);
+    const d = document.createElement("span"); d.className = "dur"; d.textContent = mmss(x.duracion);
+    b.append(n, t, d); b.onclick = () => abrir(i, true); li.append(b); ol.append(li);
+  });
+  $("nHoy").textContent = `${st.vistos.length} / ${VIDEOS.length}`;
+  $("lleno").style.width = (100 * st.vistos.length / VIDEOS.length) + "%";
+  $("nAhora").textContent = TX.de.replace("{n}", st.cur + 1).replace("{t}", VIDEOS.length);
+  $("tAhora").textContent = VIDEOS[st.cur].titulo;
+  $("ant").disabled = st.cur === 0; $("sig").disabled = st.cur === VIDEOS.length - 1;
+}
+let arrancar = false;
+function abrir(i, auto) {
+  st.cur = Math.max(0, Math.min(VIDEOS.length - 1, i)); guardar();
+  arrancar = auto; v.src = VIDEOS[st.cur].archivo; pintar();
+}
+// el video avisa con postMessage cuándo está listo y cuándo termina (cada .html también se ve solo)
+addEventListener("message", e => {
+  if (e.source !== v.contentWindow || !e.data || !e.data.s2s) return;
+  if (e.data.s2s.tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
+  if (e.data.s2s.tipo !== "fin") return;
+  if (!st.vistos.includes(st.cur)) st.vistos.push(st.cur);
+  guardar();
+  if (st.cur < VIDEOS.length - 1) abrir(st.cur + 1, true); else pintar();
+});
+$("ant").onclick = () => abrir(st.cur - 1, true);
+$("sig").onclick = () => abrir(st.cur + 1, true);
+$("cero").onclick = () => {
+  if (document.getElementById("conf")) return;
+  const caja = document.createElement("span"); caja.id = "conf"; caja.className = "ctrls";
+  const q = document.createElement("span"); q.textContent = TX.seguro;
+  const si = document.createElement("button"); si.type = "button"; si.className = "prim"; si.textContent = TX.si;
+  const no = document.createElement("button"); no.type = "button"; no.textContent = TX.no;
+  si.onclick = () => { st.vistos = []; guardar(); caja.remove(); abrir(0, false); };
+  no.onclick = () => caja.remove();
+  caja.append(q, si, no); $("cero").after(caja);
+};
+abrir(Math.min(st.cur || 0, VIDEOS.length - 1), false);
+</script>
+</body></html>
 """
+
+LISTA = {
+    "es": {"hoy": "vistos hoy", "de": "Video {n} de {t}", "ant": "Anterior", "sig": "Siguiente",
+           "cero": "Empezar el día de cero", "seguro": "¿Desmarcar los vistos de hoy?", "si": "Sí", "no": "No"},
+    "en": {"hoy": "watched today", "de": "Video {n} of {t}", "ant": "Previous", "sig": "Next",
+           "cero": "Start the day over", "seguro": "Clear today's watched marks?", "si": "Yes", "no": "No"},
+}
+
+
+def _json_en_script(x) -> str:
+    return json.dumps(x, ensure_ascii=False).replace("</", "<\\/")
 
 
 def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -> Path:
-    """videos: [{archivo, titulo, pregunta, duracion}] en el orden en que se ven."""
-    items = "\n".join(
-        f'<li><a href="{html.escape(v["archivo"])}"><span><b>{html.escape(v["titulo"])}</b>'
-        f'<span class="preg">{html.escape(v.get("pregunta", ""))}</span></span>'
-        f'<span class="dur">{int(v["duracion"]) // 60}:{int(v["duracion"]) % 60:02d}</span></a></li>'
-        for v in videos)
-    destino.write_text(INDICE.format(titulo=html.escape(titulo), items=items, idioma=idioma,
-                                     sub=TEXTOS[idioma]["sub"]), encoding="utf-8")
+    """videos: [{archivo, titulo, pregunta, duracion}] en el orden en que se ven.
+    La lista reproduce cada video en un iframe, pasa al siguiente cuando termina y marca los vistos del día
+    (en el navegador, con localStorage; si no está disponible, la lista anda igual sin recordar)."""
+    datos = [{"archivo": v["archivo"], "titulo": v["titulo"], "pregunta": v.get("pregunta", ""),
+              "duracion": round(float(v["duracion"]), 1)} for v in videos]
+    s = (INDICE.replace("__IDIOMA__", idioma).replace("__TITULO__", html.escape(titulo))
+         .replace("__SUB__", html.escape(TEXTOS[idioma]["sub"]))
+         .replace("__VIDEOS__", _json_en_script(datos)).replace("__TX__", _json_en_script(LISTA[idioma])))
+    destino.write_text(s, encoding="utf-8")
     return destino
 
 

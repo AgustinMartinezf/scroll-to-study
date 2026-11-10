@@ -42,7 +42,8 @@ def test_indice(tmp_path):
     p = reproductor.indice(tmp_path / "index.html", "Biblioteca <ejemplo>",
                            [{"archivo": "t01.html", "titulo": "La FK de multa", "pregunta": "¿Por qué?", "duracion": 48.2}])
     s = p.read_text(encoding="utf-8")
-    assert 'href="t01.html"' in s and "0:48" in s and "Biblioteca &lt;ejemplo&gt;" in s
+    assert '"archivo": "t01.html"' in s and '"duracion": 48.2' in s and "<title>Biblioteca &lt;ejemplo&gt;</title>" in s
+    assert "vistos hoy" in s and "localStorage" in s
 
 
 def test_mezcla_no_satura():

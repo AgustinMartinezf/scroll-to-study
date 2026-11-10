@@ -36,10 +36,12 @@ your material ──► inventory of statements ──► checked by code (verba
 - With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
   each type of exercise and the general method and traps, labeled as "general method".
 
-## Example
+## Guide
 
-`ejemplo/la-fk-de-multa.html` is a video made with the tool about an invented project (a library
-database, in `tests/fixtures/biblioteca`). Download it and open it in the browser.
+[media/scroll-to-study.mp4](media/scroll-to-study.mp4) is a 50-second video made with the tool itself,
+from this README and the skill's instructions (with sound). The real videos are `.html` files, not
+`.mp4`: `tools/mp4.py` exported this one so it can be shown here. What Claude wrote to make it (the
+statements with their quotes, the topic and the script) is in [`media/guia/`](media/guia/).
 
 ## Install
 
@@ -95,6 +97,7 @@ python -m pip install numpy soundfile pypdf pytest
 python -m pytest -q tests
 ```
 
+`tools/mp4.py VIDEO.html OUT.mp4` exports a video to MP4 (needs `playwright` and `ffmpeg`).
 `tools/revisar.py VIDEO.html` opens a video in Chromium and checks what the style guide asks for: that
 the animation follows the audio, that nothing important falls outside the TikTok/Reels/Shorts safe
 zones, and that the picture never stays still for more than a second (needs `playwright`).

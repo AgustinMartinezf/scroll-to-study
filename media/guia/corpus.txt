@@ -1,0 +1,248 @@
+=== archivo: README.md ===
+1| # scroll to study
+2| 
+3| Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.
+4| It works to **understand a project** (code, report, assignment brief) and to **study a course** for an
+5| exam (notes, slides, exercises): tables, chats, charts, formulas and protocols that
+6| animate right when the voice names them. Videos in English or Spanish. It is a **Claude Code** plugin:
+7| you use it with your own Claude, and everything stays on your computer.
+8| 
+9| The difference from other "study by scrolling" tools: **every fact in a video is checked against your
+10| material**. Claude proposes statements with a verbatim quote and its source (file and line, or PDF
+11| page); a script checks that the quote is there and that the names and numbers in the statement are
+12| too. Whatever cannot be checked does not reach the video: in your own project you can approve it
+13| yourself; in a course, it is left out.
+14| 
+15| ## How it works
+16| 
+17| ```
+18| your material ──► inventory of statements ──► checked by code (verbatim quote, source)
+19|                                                    │
+20|           you pick the topics ◄── topics (8–20) ◄──┘
+21|                   │
+22|                   ▼
+23|  script per topic ──► validator ──► voice (Piper) + animation ──► video .html (plays by itself)
+24|  (only sees the checked           (Claude fixes
+25|   statements of its topic)         what it flags)
+26| ```
+27| 
+28| - Claude writes the inventory, the topics and the scripts. The scripts compute everything else:
+29|   font sizes, pauses, pronunciation, and syncing the animation with the voice.
+30| - Each video gets a format that fits its topic: question and answer (with a countdown so you try to
+31|   recall first), myth vs fact, A versus B, step by step, or the story of a decision. You can force one.
+32| - The voice is [Piper](https://github.com/OHF-Voice/piper1-gpl) and runs locally. The time of each
+33|   word comes from the voice model itself, so the animation lands on the word that names it.
+34| - Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your
+35|   computer or phone, offline. The playlist is at `scroll-to-study/videos/index.html`.
+36| - With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
+37|   each type of exercise and the general method and traps, labeled as "general method".
+38| 
+39| ## Example
+40| 
+41| `ejemplo/la-fk-de-multa.html` is a video made with the tool about an invented project (a library
+42| database, in `tests/fixtures/biblioteca`). Download it and open it in the browser.
+43| 
+44| ## Install
+45| 
+46| You need [Claude Code](https://code.claude.com) and Python 3.10 or newer.
+47| 
+48| ```
+49| /plugin marketplace add AgustinMartinezf/scroll-to-study
+50| /plugin install scroll-to-study@scroll-to-study
+51| ```
+52| 
+53| The first time, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`, `onnx`,
+54| `pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to a data folder
+55| (`~/.scroll-to-study`, or the plugin's if Claude Code sets one; `S2S_DATOS` changes it).
+56| 
+57| ## Use
+58| 
+59| Open Claude Code in the folder of your project or your notes and ask something like:
+60| 
+61| > I want to really understand this project with scroll to study. The report is in docs/report.pdf.
+62| 
+63| > I have a Networks midterm: make me scroll to study videos from theory.pdf and exercises.pdf.
+64| 
+65| Claude stops so you decide which topics go in (and, in a project, which doubtful facts are true).
+66| It does the rest by itself.
+67| 
+68| ## What ends up in your folder
+69| 
+70| ```
+71| scroll-to-study/
+72|   corpus.txt          your material, numbered by line (what Claude reads)
+73|   inventario.json     statements with source, quote and state (ok / comprobar / general)
+74|   temas.json          the topics you picked
+75|   t01/ … t20/         guion.json + what the compiler and the voice generate
+76|   videos/index.html   the playlist
+77|   registro.jsonl      when and how many times each stage ran
+78| ```
+79| 
+80| ## Known limits
+81| 
+82| - The English voice (`hfc_male`) was trained on a CC BY-NC-SA dataset: fine for studying, not for
+83|   commercial use. The Spanish voice (`davefx`) has its own terms (see [THIRD_PARTY.md](THIRD_PARTY.md)).
+84| - Formulas are quoted by the text around them: PDF text extraction usually breaks formulas, so the
+85|   formula itself cannot be checked letter by letter against the material.
+86| - Diagrams that are only images in slides cannot be quoted, so they do not make it into the videos.
+87| - "The script only sees its statements" is an instruction to Claude, who has already read the whole
+88|   material; the validator backs it up by flagging names and numbers that are not in the sources.
+89| - Tested in Chromium. Safari on iPhone needs more testing.
+90| 
+91| ## Development
+92| 
+93| ```
+94| python -m pip install numpy soundfile pypdf pytest
+95| python -m pytest -q tests
+96| ```
+97| 
+98| `tools/revisar.py VIDEO.html` opens a video in Chromium and checks what the style guide asks for: that
+99| the animation follows the audio, that nothing important falls outside the TikTok/Reels/Shorts safe
+100| zones, and that the picture never stays still for more than a second (needs `playwright`).
+101| 
+102| The tests use an invented project (`tests/fixtures/biblioteca`) and a silent voice, so they need
+103| neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (names are in Spanish):
+104| 
+105| | File | What it does |
+106| |---|---|
+107| | `s2s.py` | The command line Claude uses: instalar, corpus, verificar, temas, pedido, guion, video, videos, estado |
+108| | `fuentes.py` | Numbers the material and checks each statement against its quote |
+109| | `etapas.py` | Modes, languages and formats; builds the request for each script |
+110| | `compile.py` | Validates the script and computes what the model does not decide (layout, pauses, pronunciation) |
+111| | `voice.py` | Voice with Piper and per-word timings |
+112| | `engine.py` + `engine.js` | Builds the animation (GSAP); looks come from `temas/` |
+113| | `reproductor.py` + `sonido.py` | Mixes the audio and outputs a `.html` that plays by itself |
+114| 
+115| ## License
+116| 
+117| [AGPL-3.0](LICENSE). If you offer a modified version as a service, you must publish its code.
+118| Third-party components and their licenses are in [THIRD_PARTY.md](THIRD_PARTY.md).
+=== archivo: SKILL.md ===
+1| ---
+2| name: scroll-to-study
+3| description: Turns study material into short vertical videos with voice, to review one topic a day, with every fact checked against the material. Works to understand your own project (repo, report, assignment brief) or to study a course for an exam (notes, slides, exercises). Use it when the person wants to study or review with videos, or asks for a scroll to study inventory, topics or scripts.
+4| ---
+5| 
+6| # Scroll to study: from material to study videos
+7| 
+8| Together with the person, you will produce 8 to 20 videos of 30–60 s, to review one topic a day.
+9| Each video is a single `.html` file that plays by itself in the browser, with voice.
+10| 
+11| There are two modes, and the first step is to know which one applies:
+12| - **proyecto** (project): something the person made (an assignment, a work project). They know the
+13|   material and can confirm doubtful facts.
+14| - **materia** (course): they study for an exam with notes, slides or a book. They cannot tell whether
+15|   a fact is true, so whatever cannot be checked against the material does not go into any video.
+16| 
+17| And two languages for the videos: **es** (Spanish, the default) and **en** (English). Ask which one
+18| they want if it is not obvious from how they talk to you. The material can be in either language.
+19| 
+20| The central rule: **nothing in a video can state something that is not in the material.** Every fact
+21| goes through code that checks it: you write the JSON files and `s2s.py` checks them. Never accept a
+22| stage without running its check, and never hand-edit what the script computes.
+23| 
+24| Abbreviations: `S2S` = `python3 ${CLAUDE_SKILL_DIR}/scripts/s2s.py` (on Windows it may be `python`
+25| instead of `python3`). `T` = the working folder: `scroll-to-study/` inside the current folder, unless
+26| the person asks for another one. The prompts are in `${CLAUDE_SKILL_DIR}/prompts/`. Where a prompt
+27| says "write ONLY the JSON", write that JSON to the file given.
+28| 
+29| Talk to the person in their language. The commands and JSON keys are in Spanish; that is expected.
+30| 
+31| ## 0. Set up (once per computer)
+32| 
+33|     python3 -m pip install -r ${CLAUDE_SKILL_DIR}/requirements.txt
+34|     S2S instalar --idioma es        # or --idioma en
+35| 
+36| `instalar` downloads the voice for that language (Piper, about 65 MB), gsap and KaTeX to a data
+37| folder and checks that the voice works. Run it again with the other language if they want videos in
+38| both. If it fails, show the error to the person; do not go on to the video stage without it (the
+39| script stages work without the voice).
+40| 
+41| ## 1. Material
+42| 
+43| Ask what they are going to study and where the material is. In project mode: the code (folder or
+44| .zip), the report and the assignment brief or rubric if there is one. In course mode: notes, slides,
+45| worked exercises and, if they exist, the course syllabus or past exams. Then:
+46| 
+47|     S2S corpus -t T --modo proyecto --idioma en --repo PATH_TO_REPO --doc report.pdf --doc brief.pdf
+48|     S2S corpus -t T --modo materia --idioma es --doc theory.pdf --doc exercises.pdf
+49| 
+50| Optional: `--estilo cuaderno` (notebook paper, the default) or `--estilo pizarra` (dark board) sets
+51| how every video looks.
+52| 
+53| If it warns that the material is too large, ask which folders or chapters matter.
+54| 
+55| ## 2. Inventory of statements
+56| 
+57| Follow `prompts/<modo>/inventario.md` reading all of `T/corpus.txt` (in parts if it is long). Write
+58| `T/inventario.json` as `{"afirmaciones": [{"id","texto","fuente","cita","tipo"}, …]}` and run
+59| 
+60|     S2S verificar -t T
+61| 
+62| For each statement in "comprobar", look at the reason: if it says where the quote appears, fix the
+63| source; if the quote is not in the material, find the real verbatim quote or remove the statement.
+64| One round of fixes, then verify again. In project mode, show what is still in "comprobar" to the
+65| person in a short list: if they confirm it is correct, set `"aprobado": true`; if not, remove it.
+66| Never set `aprobado` unless the person says so. In course mode nothing is approved by hand: whatever
+67| cannot be verified is removed (and tell the person how many statements were left out).
+68| 
+69| If in course mode the material is an exercise sheet without theory, do not solve specific exercises
+70| (the person solves and checks them on their own). Record each type of exercise as a statement from
+71| the material and add the general methods and traps to approach it, as `prompts/materia/inventario.md`
+72| explains. Tell the person those methods do not come from their material and that the videos label
+73| them as "general method".
+74| 
+75| If the material contradicts itself (for example, a slide's text says the opposite of its figure), do
+76| not pick a version: leave that statement out and tell the person what you saw and where, so they can
+77| check it with their teacher.
+78| 
+79| ## 3. Topics (the person decides)
+80| 
+81| Follow `prompts/<modo>/temas.md` with the verified inventory, write `T/temas.json`
+82| (`{"temas": [{"id","titulo","pregunta","afirmaciones"}]}`) and run `S2S temas -t T`.
+83| Show them the list (title and question) and ask what to remove, add or reorder, and whether something
+84| they will surely be asked is missing. If it is missing, there may be no statements that back it: say
+85| so instead of making it up. Apply their changes and run `S2S temas` again.
+86| 
+87| Each video gets a format picked from its statements (pregunta: question and answer with a countdown;
+88| mito: myth vs fact; avsb: A versus B; pasos: step by step; historia: problem → decision). If the
+89| person wants a specific format for a topic, add `"formato": "<name>"` to that topic.
+90| 
+91| ## 4. Scripts, one per topic
+92| 
+93| For each topic, in order:
+94| 
+95| 1. `S2S pedido -t T --tema t01`. **That output is the only thing you may use as content**: even if
+96|    you read the whole material, do not add names, numbers, reasons or examples that are not there.
+97|    It also says the video language, the format and the closing line.
+98| 2. Write the script following `prompts/guion.md` to `T/t01/guion.json`, in the video language. If a
+99|    word will be mispronounced (snake_case, acronyms, words without accents in code), add it to
+100|    `"lexico"`.
+101| 3. `S2S guion -t T --tema t01`. Fix everything marked `ARREGLAR` and run it again. Also treat as
+102|    errors the `AVISO` lines about identifiers or numbers that are not in the sources.
+103|    You do not fix `PREGUNTAR`: note it for the person.
+104|    If the script says not to continue, move on to the next topic and tell them at the end.
+105| 
+106| If there are many topics, do 3 or 4 at a time and ask whether to continue. When done, gather all
+107| `PREGUNTAR` and `[COMPROBAR]` notes and resolve them with the person: they know whether the fact is
+108| true. With their answer, fix the script (or the sources) and validate again.
+109| 
+110| ## 5. Videos
+111| 
+112|     S2S videos -t T --titulo "<name of the project or course>"
+113| 
+114| It generates the voice and the animation of every finished script (a few seconds per video) and a
+115| playlist at `T/videos/index.html`. Each video is a single `.html` of about 1 MB that works offline:
+116| it can be opened on the computer or copied to a phone. To redo one after changing its script:
+117| `S2S video -t T --tema t01`. `S2S estado -t T` shows what is missing.
+118| If `video` warns that something appears right before the camera changes scene, move that `{show}`
+119| earlier in the script or add a short sentence after it, validate again and redo that video.
+120| 
+121| When done, say in two or three lines how many videos were made, which were not and why, and where to
+122| open the playlist. Suggest watching one a day, in order.
+123| 
+124| ## What you do not do
+125| - Do not write spec.json, script.json, gaps.json or timing.json by hand: the scripts generate them.
+126| - Do not change sizes, pauses or pronunciation in the script outside `"lexico"`: the compiler computes them.
+127| - Do not use icons outside the list in `prompts/guion.md` (the validator rejects them).
+128| - Do not upload the material or the videos anywhere: everything stays on the person's computer.

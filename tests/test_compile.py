@@ -69,6 +69,7 @@ def test_el_prompt_apunta_a_los_dos_ejemplos_y_ambos_compilan():
     ({"type": "chart", "id": "g", "bars": [["una etiqueta demasiado larga", 1], ["b", 2]]}, "pasa de 18"),
     ({"type": "chat", "id": "c", "msgs": [["c", "hola"]]}, '"a"|"b"'),
     ({"type": "chat", "id": "c", "msgs": [["a", "x" * 80]]}, "pasa de 70"),
+    ({"type": "console", "id": "k", "lines": ["/plugin marketplace add AgustinMartinezf/x"]}, "máximo 34"),
 ])
 def test_elementos_nuevos_se_validan(elemento, esperado):
     def mod(g):
