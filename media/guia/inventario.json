@@ -1,0 +1,248 @@
+{
+ "afirmaciones": [
+  {
+   "id": "A1",
+   "texto": "Scroll to study turns your study material into vertical videos of 30 to 60 seconds, with voice, to review one topic a day.",
+   "fuente": "README.md:3",
+   "cita": "Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A2",
+   "texto": "It works to understand a project and to study a course for an exam.",
+   "fuente": "README.md:4",
+   "cita": "It works to **understand a project** (code, report, assignment brief) and to **study a course** for an",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A3",
+   "texto": "It is a Claude Code plugin: you use it with your own Claude, and everything stays on your computer.",
+   "fuente": "README.md:7",
+   "cita": "you use it with your own Claude, and everything stays on your computer.",
+   "tipo": "decision",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A4",
+   "texto": "Every fact in a video is checked against your material.",
+   "fuente": "README.md:9",
+   "cita": "**every fact in a video is checked against your",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A5",
+   "texto": "Claude proposes statements with a verbatim quote and its source: file and line, or PDF page.",
+   "fuente": "README.md:10-11",
+   "cita": "Claude proposes statements with a verbatim quote and its source (file and line, or PDF",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A6",
+   "texto": "A script checks that the quote is there and that the names and numbers in the statement are too.",
+   "fuente": "README.md:11-12",
+   "cita": "a script checks that the quote is there and that the names and numbers in the statement are",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A7",
+   "texto": "Whatever cannot be checked does not reach the video: in your own project you can approve it yourself; in a course, it is left out.",
+   "fuente": "README.md:12-13",
+   "cita": "Whatever cannot be checked does not reach the video: in your own project you can approve it",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A8",
+   "texto": "Claude writes the inventory, the topics and the scripts; the scripts compute font sizes, pauses, pronunciation and the sync with the voice.",
+   "fuente": "README.md:28-29",
+   "cita": "Claude writes the inventory, the topics and the scripts. The scripts compute everything else:",
+   "tipo": "decision",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A9",
+   "texto": "The voice is Piper and runs locally; the time of each word comes from the voice model, so the animation lands on the word that names it.",
+   "fuente": "README.md:32-33",
+   "cita": "word comes from the voice model itself, so the animation lands on the word that names it.",
+   "tipo": "decision",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A10",
+   "texto": "Each video is a single html file of about 1 MB that opens in the browser on your computer or phone, offline.",
+   "fuente": "README.md:34-35",
+   "cita": "Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A11",
+   "texto": "Each video gets a format that fits its topic: question and answer with a countdown, myth vs fact, A versus B, step by step, or the story of a decision.",
+   "fuente": "README.md:30-31",
+   "cita": "Each video gets a format that fits its topic: question and answer (with a countdown so you try to",
+   "tipo": "decision",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A12",
+   "texto": "With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize each type and the general method and traps.",
+   "fuente": "README.md:36-37",
+   "cita": "With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize",
+   "tipo": "decision",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A13",
+   "texto": "To install it, you need Claude Code and Python 3.10 or newer, and two plugin commands.",
+   "fuente": "README.md:46",
+   "cita": "You need [Claude Code](https://code.claude.com) and Python 3.10 or newer.",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A14",
+   "texto": "The first time, Claude installs the Python dependencies and downloads the voice for your language, about 65 MB.",
+   "fuente": "README.md:53-54",
+   "cita": "`pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to a data folder",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A15",
+   "texto": "To use it, open Claude Code in the folder of your project or your notes and ask for it.",
+   "fuente": "README.md:59",
+   "cita": "Open Claude Code in the folder of your project or your notes and ask something like:",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A16",
+   "texto": "Claude stops so you decide which topics go in and, in a project, which doubtful facts are true. It does the rest by itself.",
+   "fuente": "README.md:65-66",
+   "cita": "Claude stops so you decide which topics go in (and, in a project, which doubtful facts are true).",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A17",
+   "texto": "The playlist ends up in scroll-to-study/videos/index.html.",
+   "fuente": "README.md:76",
+   "cita": "videos/index.html   the playlist",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A18",
+   "texto": "There are two modes: proyecto, something you made, where you can confirm doubtful facts; and materia, a course, where you cannot tell whether a fact is true.",
+   "fuente": "SKILL.md:11-15",
+   "cita": "There are two modes, and the first step is to know which one applies:",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A19",
+   "texto": "In course mode, whatever cannot be checked against the material does not go into any video.",
+   "fuente": "SKILL.md:15",
+   "cita": "a fact is true, so whatever cannot be checked against the material does not go into any video.",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A20",
+   "texto": "Videos come in Spanish or English, and the material can be in either language.",
+   "fuente": "SKILL.md:18",
+   "cita": "The material can be in either language.",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A21",
+   "texto": "Claude shows you the list of topics and asks what to remove, add or reorder.",
+   "fuente": "SKILL.md:83",
+   "cita": "Show them the list (title and question) and ask what to remove, add or reorder, and whether something",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A22",
+   "texto": "If a topic you want is missing, there may be no statements that back it, and Claude says so instead of making it up.",
+   "fuente": "SKILL.md:84-85",
+   "cita": "so instead of making it up.",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A23",
+   "texto": "Each script only uses the checked statements of its topic, even if Claude read the whole material.",
+   "fuente": "SKILL.md:95-96",
+   "cita": "you read the whole material, do not add names, numbers, reasons or examples that are not there.",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A24",
+   "texto": "If the material contradicts itself, Claude does not pick a version: it leaves that statement out and tells you where, so you check it with your teacher.",
+   "fuente": "SKILL.md:75-77",
+   "cita": "not pick a version: leave that statement out and tell the person what you saw and where, so they can",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A25",
+   "texto": "The general methods for exercises do not come from your material, and the videos label them as general method.",
+   "fuente": "SKILL.md:72-73",
+   "cita": "them as \"general method\".",
+   "tipo": "regla",
+   "estado": "ok",
+   "motivos": []
+  },
+  {
+   "id": "A26",
+   "texto": "The suggestion is to watch one video a day, in order.",
+   "fuente": "SKILL.md:122",
+   "cita": "Suggest watching one a day, in order.",
+   "tipo": "dato",
+   "estado": "ok",
+   "motivos": []
+  }
+ ],
+ "origen": {
+  "repo": null,
+  "docs": [
+   "/home/claude/guia-src/README.md",
+   "/home/claude/guia-src/skills/scroll-to-study/SKILL.md"
+  ],
+  "modo": "proyecto",
+  "estilo": "cuaderno",
+  "idioma": "en"
+ }
+}

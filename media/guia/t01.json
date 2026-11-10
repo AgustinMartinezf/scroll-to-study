@@ -1,0 +1,178 @@
+{
+ "bloques": [
+  {
+   "fuentes": [
+    "A1",
+    "A2"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "chip",
+     "id": "notas",
+     "text": "your notes, slides, code",
+     "kind": "white",
+     "icon": "list-checks"
+    },
+    {
+     "type": "arrow",
+     "id": "ar"
+    },
+    {
+     "type": "chip",
+     "id": "vid",
+     "text": "30–60 s videos with voice",
+     "kind": "good",
+     "icon": "check-circle"
+    },
+    {
+     "type": "row",
+     "id": "dos",
+     "items": [
+      {
+       "id": "pr",
+       "text": "a project",
+       "kind": "blue",
+       "icon": "code"
+      },
+      {
+       "id": "ex",
+       "text": "an exam",
+       "kind": "purple",
+       "icon": "calendar-check"
+      }
+     ]
+    }
+   ],
+   "frases": [
+    "What if your {show notas}notes turned into [+videos] like this one?",
+    "Scroll to study turns {show ar}your material into {show vid}short videos, with voice.",
+    "To understand a {show pr}[+project], or to study for an {show ex}exam."
+   ]
+  },
+  {
+   "fuentes": [
+    "A4",
+    "A5",
+    "A6",
+    "A7"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "chip",
+     "id": "af",
+     "text": "statement",
+     "kind": "white",
+     "icon": "list-checks"
+    },
+    {
+     "type": "chip",
+     "id": "cit",
+     "text": "verbatim quote + file:line",
+     "kind": "blue",
+     "icon": "magnifying-glass"
+    },
+    {
+     "type": "console",
+     "id": "con",
+     "title": "check",
+     "lines": [
+      "$ s2s verificar"
+     ]
+    },
+    {
+     "type": "chip",
+     "id": "out",
+     "text": "not found → not in the video",
+     "kind": "bad",
+     "icon": "x-circle"
+    }
+   ],
+   "frases": [
+    "But can you [+trust] it? Every fact is checked against your material.",
+    "Claude writes each {show af}statement with a {show cit}verbatim quote and its source.",
+    "A {show con}{type con}script checks that the quote, the names and the numbers are there.",
+    "Whatever cannot be checked does {show out}[-not] reach the video."
+   ]
+  },
+  {
+   "fuentes": [
+    "A15",
+    "A16"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "chat",
+     "id": "ch",
+     "title": "Claude Code",
+     "msgs": [
+      [
+       "b",
+       "Make me scroll to study videos from my notes."
+      ]
+     ]
+    },
+    {
+     "type": "list",
+     "id": "vos",
+     "title": "you decide",
+     "items": [
+      [
+       "tm",
+       "which topics go in"
+      ],
+      [
+       "dud",
+       "which doubtful facts are true"
+      ]
+     ]
+    }
+   ],
+   "frases": [
+    "To use it, open Claude Code in the folder of your notes, and {show ch}[+ask].",
+    "Claude {show vos}stops so you decide {show tm}{good tm +0.3}the topics,",
+    "and, in a project, {show dud}{good dud +0.3}which doubtful facts are true. It does the rest by itself."
+   ]
+  },
+  {
+   "fuentes": [
+    "A10"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "chip",
+     "id": "html",
+     "text": "one .html file · about 1 MB",
+     "kind": "white",
+     "icon": "code"
+    },
+    {
+     "type": "big",
+     "id": "off",
+     "text": "offline, on your phone"
+    }
+   ],
+   "frases": [
+    "Each video is {show html}a single file of about one megabyte,",
+    "and it plays {show off}{boom off +0.2}[+offline], even on your phone."
+   ]
+  }
+ ],
+ "final": {
+  "titulo": "IN SHORT",
+  "decilo": "That's it",
+  "frases": [
+   "In [+short]: {show fl1}your material becomes videos, {show fl2}and every fact is checked.",
+   "{show fnext}Next: try it with your own notes."
+  ],
+  "lineas": [
+   "<b>your material</b> → short videos",
+   "every fact <b>checked</b> against it"
+  ],
+  "mañana": "try it with your own notes",
+  "etiqueta_manana": "Next: try it with your own notes"
+ }
+}

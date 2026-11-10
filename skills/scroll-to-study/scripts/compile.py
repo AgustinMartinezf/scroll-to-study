@@ -62,6 +62,7 @@ LAYOUT_DEL_COMPILADOR = {"fs", "w"}   # si el LLM los pone, se ignoran
 
 # Ancho útil de una estación (el motor centra en x±490; dejo margen)
 ANCHO_MAX = 960
+CONSOLA_MAX = 34
 FS_MIN = 28
 RITMO = 6.15         # sílabas por segundo de Piper davefx a velocidad 1.1 (medido en 59 frases)
 PAUSA_BLOQUE = 0.4   # GAPS al final de cada bloque
@@ -328,8 +329,11 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
     elif tipo == "console":
         ids.consolas.add(e["id"])
         iconos.add("terminal-window")
-        for i in range(len(e["lines"])):
+        for i, linea in enumerate(e["lines"]):
             nuevo_id(f"{e['id']}-l{i}")
+            if len(_texto_plano(linea)) > CONSOLA_MAX:      # letra fija: ~34 caracteres por línea en 960px
+                rep.error(donde, f"la línea {i} de la consola tiene {len(_texto_plano(linea))} caracteres "
+                                 f"(máximo {CONSOLA_MAX}); partila en dos líneas o acortala")
     elif tipo == "list":
         iconos.add(e.get("icon", "list-checks"))
         for it in e["items"]:

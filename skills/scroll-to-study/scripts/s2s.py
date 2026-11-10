@@ -242,7 +242,8 @@ def cmd_guion(a: argparse.Namespace) -> int:
         if isinstance(guion.get("final"), dict):
             guion["final"].setdefault("titulo", tx["titulo_final"])
             guion["final"].setdefault("decilo", tx["decilo"])
-            guion["final"]["etiqueta_manana"] = f"{tx['manana']}: {guion['final'].get('mañana', '')}"
+            # titulo, decilo y etiqueta_manana se pueden pisar desde el guion (la guía del README lo hace)
+            guion["final"].setdefault("etiqueta_manana", f"{tx['manana']}: {guion['final'].get('mañana', '')}")
         spec, rep = compilar(guion, lex, ICONOS, leer(t / "inventario.json"), ritmo=tx["ritmo"])
         errores, avisos = rep.errores, rep.avisos
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
