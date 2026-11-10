@@ -49,16 +49,20 @@ here. What Claude wrote to make it (the statements with their quotes, the topic 
 
 ## Install
 
-You need [Claude Code](https://code.claude.com) and Python 3.10 or newer.
+You need [Claude Code](https://code.claude.com) and Python 3.10 or newer. In Claude Code:
 
 ```
 /plugin marketplace add AgustinMartinezf/scroll-to-study
 /plugin install scroll-to-study@scroll-to-study
 ```
 
-The first time, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`, `onnx`,
-`pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to a data folder
-(`~/.scroll-to-study`, or the plugin's if Claude Code sets one; `S2S_DATOS` changes it).
+(From a terminal it is `claude plugin marketplace add AgustinMartinezf/scroll-to-study` and
+`claude plugin install scroll-to-study@scroll-to-study`.) To get a newer version later:
+`/plugin marketplace update scroll-to-study`.
+
+The first time you use it, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`,
+`onnx`, `pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to
+`~/.scroll-to-study` (`S2S_DATOS` changes the folder). That folder stays when the plugin updates.
 
 ## Use
 
