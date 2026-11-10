@@ -3,8 +3,8 @@
 Lo que viene con el skill (íconos, efectos, fuentes, estilos) está junto a este archivo.
 Lo que se descarga una vez con `s2s.py instalar` (la voz y gsap) va a una carpeta de datos:
   1. S2S_DATOS, si está definida;
-  2. CLAUDE_PLUGIN_DATA, si corre como plugin de Claude Code (sobrevive a las actualizaciones);
-  3. ~/.scroll-to-study
+  2. ~/.scroll-to-study
+(CLAUDE_PLUGIN_DATA no sirve: Claude Code no la pasa a los comandos que corre Claude.)
 Un config.json en la carpeta de datos puede pisar cualquier ruta (relativas a esa carpeta).
 """
 import json
@@ -22,7 +22,7 @@ for _flujo in (sys.stdout, sys.stderr):
 
 
 def carpeta_datos() -> Path:
-    for var in ("S2S_DATOS", "CLAUDE_PLUGIN_DATA"):
+    for var in ("S2S_DATOS",):
         if os.environ.get(var):
             return Path(os.environ[var]).expanduser()
     return Path.home() / ".scroll-to-study"
