@@ -38,10 +38,14 @@ your material ──► inventory of statements ──► checked by code (verba
 
 ## Guide
 
-[media/scroll-to-study.mp4](media/scroll-to-study.mp4) is a 50-second video made with the tool itself,
-from this README and the skill's instructions (with sound). The real videos are `.html` files, not
-`.mp4`: `tools/mp4.py` exported this one so it can be shown here. What Claude wrote to make it (the
-statements with their quotes, the topic and the script) is in [`media/guia/`](media/guia/).
+A 50-second video made with the tool itself, from this README and the skill's instructions (turn the
+sound on):
+
+https://github.com/user-attachments/assets/6f098172-30c9-4070-916c-8e1dbf69b226
+
+The real videos are `.html` files, not `.mp4`: `tools/mp4.py` exported this one so it can be shown
+here. What Claude wrote to make it (the statements with their quotes, the topic and the script) is in
+[`media/guia/`](media/guia/).
 
 ## Install
 
