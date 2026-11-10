@@ -9,9 +9,16 @@ Un config.json en la carpeta de datos puede pisar cualquier ruta (relativas a es
 """
 import json
 import os
+import sys
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
+
+# En Windows la consola (y la tubería por la que Claude lee la salida) suele ser cp1252: «, → o ñ
+# harían fallar un print. Todo lo que imprimen los scripts sale en UTF-8.
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure") and (_flujo.encoding or "").lower().replace("-", "") != "utf8":
+        _flujo.reconfigure(encoding="utf-8", errors="replace")
 
 
 def carpeta_datos() -> Path:
