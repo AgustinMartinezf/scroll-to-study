@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/6f098172-30c9-4070-916c-8e1dbf69b226
+
 # scroll to study
 
 Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.
