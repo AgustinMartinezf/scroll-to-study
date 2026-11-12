@@ -141,10 +141,19 @@ For each topic, in order:
    errors the `AVISO` lines about identifiers or numbers that are not in the sources.
    You do not fix `PREGUNTAR`: note it for the person.
    If the script says not to continue, move on to the next topic and tell them at the end.
+4. Once the script is valid, the practice questions for that topic: `S2S preguntas -t T --tema t01`.
+   Without `T/t01/preguntas.json` it prints their request: the topic and only its verified statements.
+   **That output is the only thing you may use as content**, as with the script. Write
+   `T/t01/preguntas.json` following `prompts/preguntas.md`, in the video language, and run
+   `S2S preguntas -t T --tema t01` again to validate it. Same fixing loop as the script: fix everything
+   marked `ARREGLAR`, also treat as errors the `AVISO` lines about identifiers or numbers that are not in
+   the sources, note `PREGUNTAR` for the person, and if it says not to continue, move on.
+   The questions stay in `T/t01/preguntas.json`: they do not show up in the video or the playlist yet,
+   so do not tell the person they will see them. `S2S estado -t T` says which topics have them validated.
 
 If there are many topics, do 3 or 4 at a time and ask whether to continue. When done, gather all
 `PREGUNTAR` and `[COMPROBAR]` notes and resolve them with the person: they know whether the fact is
-true. With their answer, fix the script (or the sources) and validate again.
+true. With their answer, fix the script or the questions (or the sources) and validate again.
 
 ## 6. Videos
 

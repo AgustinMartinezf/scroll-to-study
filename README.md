@@ -83,7 +83,8 @@ scroll-to-study/
   corpus.txt          your material, numbered by line (what Claude reads)
   inventario.json     statements with source, quote and state (ok / comprobar / general)
   temas.json          the topics you picked
-  t01/ … t20/         guion.json + what the compiler and the voice generate
+  t01/ … t20/         guion.json, preguntas.json (practice questions, not in the videos yet)
+                      + what the compiler and the voice generate
   videos/index.html   the playlist
   registro.jsonl      when and how many times each stage ran
 ```
@@ -137,9 +138,9 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 
 | File | What it does |
 |---|---|
-| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, respaldo, temas, pedido, guion, video, videos, estado, mp4, diagnostico |
+| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, respaldo, temas, pedido, guion, preguntas, video, videos, estado, mp4, diagnostico |
 | `fuentes.py` | Numbers the material and checks each statement against its quote |
-| `etapas.py` | Modes, languages and formats; builds the request for each script |
+| `etapas.py` | Modes, languages and formats; builds the request for each script and its questions, and checks the questions |
 | `compile.py` | Validates the script and computes what the model does not decide (layout, pauses, pronunciation) |
 | `voice.py` | Voice with Piper and per-word timings |
 | `engine.py` + `engine.js` | Builds the animation (GSAP); looks come from `temas/` |
