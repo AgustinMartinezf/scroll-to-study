@@ -50,7 +50,17 @@ worked exercises and, if they exist, the course syllabus or past exams. Then:
 Optional: `--estilo cuaderno` (notebook paper, the default) or `--estilo pizarra` (dark board) sets
 how every video looks.
 
+What can go in `--doc`: PDFs with text, slides (`.pptx`), Word documents (`.docx`), and text or
+code files. Slides are read slide by slide (titles, text boxes, tables and speaker notes) and quoted as
+`slides.pptx:d4`; Word documents are numbered by paragraph, like a text file. Images inside them have
+no text to quote, so they do not count. Old formats (`.ppt`, `.doc`) and Google Slides or Docs links
+are not read: ask the person to export them as `.pptx`, `.docx` or PDF.
+
 If it warns that the material is too large, ask which folders or chapters matter.
+
+If it warns that a PDF has pages without text, it is probably scanned: its content cannot be quoted.
+Tell the person how many pages were empty and ask for a PDF with text (the digital version, or the
+scan run through OCR first, for example with `ocrmypdf`). Do not guess what those pages say.
 
 ## 2. Inventory of statements
 
