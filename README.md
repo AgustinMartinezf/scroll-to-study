@@ -6,10 +6,11 @@ exam (notes, slides, exercises): tables, chats, charts, formulas and protocols t
 animate right when the voice names them. Videos in English or Spanish. It is a **Claude Code** plugin:
 you use it with your own Claude, and everything stays on your computer.
 
-The difference from other "study by scrolling" tools: **every fact in a video is checked against your
-material**. Claude proposes statements with a verbatim quote and its source (file and line, or PDF
-page); a script checks that the quote is there and that the names and numbers in the statement are
-too. Whatever cannot be checked does not reach the video: in your own project you can approve it
+The difference from other "study by scrolling" tools: **every quote is checked by code, and Claude
+reviews that the quote supports the statement**. Claude proposes statements with a verbatim quote and
+its source (file and line, or PDF page); a script checks that the quote is there and that the names
+and numbers in the statement are too, and then Claude reviews, quote by quote, that it actually backs
+the statement. Whatever does not pass does not reach the video: in your own project you can approve it
 yourself; in a course, it is left out.
 
 ## How it works
@@ -96,6 +97,10 @@ scroll-to-study/
 - Diagrams that are only images in slides cannot be quoted, so they do not make it into the videos.
 - "The script only sees its statements" is an instruction to Claude, who has already read the whole
   material; the validator backs it up by flagging names and numbers that are not in the sources.
+- Code checks that the quote is in the material and that the statement's names and numbers appear in
+  it; that the quote actually *supports* the statement is Claude's own review, not a mechanical check.
+  A wrong call there is possible, so in a project you confirm the doubtful ones and in a course they
+  are dropped.
 - Tested in Chromium. Safari on iPhone needs more testing.
 
 ## Development

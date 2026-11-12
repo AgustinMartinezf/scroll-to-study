@@ -7,6 +7,7 @@ comprobar con código y fabrica los videos:
   python3 s2s.py instalar                       # una vez: voz (Piper) y gsap a la carpeta de datos
   python3 s2s.py corpus    -t T [--modo proyecto|materia] --repo RUTA|repo.zip [--doc apunte.pdf ...]
   python3 s2s.py verificar -t T                 # verifica T/inventario.json contra el material
+  python3 s2s.py respaldo  -t T                 # pide y aplica el juicio: ¿la cita respalda la afirmación?
   python3 s2s.py temas     -t T                 # filtra T/temas.json (solo afirmaciones verificadas)
   python3 s2s.py pedido    -t T --tema t01      # el pedido del guion: el tema y SOLO sus afirmaciones
   python3 s2s.py guion     -t T --tema t01      # valida T/t01/guion.json; si está ok escribe spec.json
@@ -37,9 +38,10 @@ sys.path.insert(0, str(AQUI))
 import fuentes                                      # noqa: E402
 from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
-from etapas import (IDIOMAS, MODOS, escribir, escribir_salidas, filtrar_temas, idioma_de, leer, modo_de,  # noqa: E402
-                    textos,
-                    pedido_guion, resumen_inventario, separar_errores)
+from etapas import (IDIOMAS, MODOS, aplicar_respaldo, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
+                    leer, modo_de, textos,
+                    pedido_guion, pedido_respaldo, pendientes_respaldo, reaplicar_respaldo,
+                    resumen_inventario, separar_errores)
 
 ICONOS = AQUI / "iconos"          # solo los íconos permitidos (y que existen en el motor)
 MAX_INTENTOS = 3
@@ -201,9 +203,16 @@ def cmd_verificar(a: argparse.Namespace) -> int:
             if x["estado"] == "general":
                 x["estado"] = "comprobar"
                 x["motivos"].append("en un proyecto todo tiene que salir del material")
+    # fuentes.verificar recalcula los estados desde cero: los juicios de respaldo guardados se aplican de nuevo
+    sin_respaldo = reaplicar_respaldo(inv)
     inv["origen"] = o
     escribir(t / "inventario.json", inv)
     resumen_inventario(inv)
+    if sin_respaldo:
+        print(f"{len(sin_respaldo)} siguen en «comprobar» porque la cita no las respalda: {', '.join(sin_respaldo)}")
+    pend = len(pendientes_respaldo(inv))
+    if pend:
+        print(f"{pend} afirmaciones en «ok» sin juicio de respaldo → corré: s2s.py respaldo -t {t}")
     gen = sum(x["estado"] == "general" for x in inv["afirmaciones"])
     if gen:
         print(f"{gen} métodos o trampas generales (no salen del material; el video los marca)")
@@ -212,8 +221,46 @@ def cmd_verificar(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_respaldo(a: argparse.Namespace) -> int:
+    t = a.trabajo
+    inv = leer(t / "inventario.json")
+    pedido = t / "respaldo_pedido.txt"
+    respuesta = t / "respaldo.json"
+    if not respuesta.exists():
+        # fase a: sin respaldo.json, pedir el juicio de Claude para las afirmaciones en «ok» que no lo tienen
+        pend = pendientes_respaldo(inv)
+        if not pend:
+            print("Todas las afirmaciones en «ok» ya tienen juicio de respaldo; no hay nada que pedir.")
+            registrar(t, "respaldo", fase="pedido", afirmaciones=0)
+            return 0
+        pedido.write_text(pedido_respaldo(inv), encoding="utf-8")
+        print(f"{len(pend)} afirmaciones en «ok» sin juicio → revisá {pedido}")
+        print(f"Respondé en {respuesta} y volvé a correr: s2s.py respaldo -t {t}")
+        registrar(t, "respaldo", fase="pedido", afirmaciones=len(pend))
+        return 0
+    # fase b: con respaldo.json, aplicarlo
+    errores, movidos = aplicar_respaldo(inv, leer(respuesta))
+    if errores:
+        for e in errores:
+            print("ERROR  ", e)
+        registrar(t, "respaldo", fase="aplicar", error="|".join(errores))
+        return 1
+    escribir(t / "inventario.json", inv)
+    # el juicio ya quedó guardado en cada afirmación: respaldo.json se consume, así la próxima corrida
+    # pide solo las afirmaciones nuevas o cambiadas en vez de chocar con una respuesta vieja
+    respuesta.replace(t / "respaldo_aplicado.json")
+    print(f"{len(movidos)} afirmaciones pasan a «comprobar» porque la cita no las respalda"
+          + (f": {', '.join(movidos)}" if movidos else ""))
+    registrar(t, "respaldo", fase="aplicar", comprobar=len(movidos))
+    return 0
+
+
 def cmd_temas(a: argparse.Namespace) -> int:
     t = a.trabajo
+    pend = pendientes_respaldo(leer(t / "inventario.json"))
+    if pend:
+        print(f"AVISO  {len(pend)} afirmaciones en «ok» sin juicio de respaldo ({', '.join(x['id'] for x in pend)}):"
+              f" corré s2s.py respaldo -t {t} antes de armar los temas")
     temas = filtrar_temas(leer(t / "temas.json"), leer(t / "inventario.json"))
     escribir(t / "temas.json", temas)
     for x in temas["temas"]:
@@ -339,7 +386,7 @@ def cmd_estado(a: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "temas", "pedido", "guion",
+    ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion",
                                       "video", "videos", "estado"])
     ap.add_argument("-t", "--trabajo", type=Path)
     ap.add_argument("--repo", type=Path)
