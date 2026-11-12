@@ -60,8 +60,20 @@ PLAYER_JS = """
   const barra = document.getElementById("s2s-barra");
   const tl = window.__timelines.main, D = tl.duration();
   const clips = [...document.querySelectorAll("#root .clip")].map(e => ({ e, s: +e.dataset.start, d: +e.dataset.duration }));
-  let ctx = null, buffer = null, fuente = null, t0 = 0, pos = 0, sonando = false;
+  let ctx = null, buffer = null, fuente = null, t0 = 0, pos = 0, sonando = false, silencio = null;
   const ahora = () => sonando ? Math.min(D, ctx.currentTime - t0) : pos;
+  function desbloquearSilencio() {
+    // Respaldo para iOS anterior a 17 (sin navigator.audioSession): un elemento Audio() en bucle usa
+    // el canal "media", que suena con el teléfono en silencio, y arrastra a Web Audio con él. Todo en
+    // try/catch: algunos visores bloquean ese elemento; si falla, el video sigue igual que hoy.
+    if (silencio) return;
+    try {
+      silencio = new Audio("data:audio/mpeg;base64,__SILENCIO_MP3__");
+      silencio.loop = true;
+      const pr = silencio.play();
+      if (pr && pr.catch) pr.catch(() => {});
+    } catch (e) { silencio = null; }
+  }
   const avisar = (tipo) => {
     const detalle = { tipo, t: +ahora().toFixed(2), video: document.title };
     window.dispatchEvent(new CustomEvent("s2s", { detail: detalle }));
@@ -88,7 +100,13 @@ PLAYER_JS = """
     boton.textContent = TX.otraVez; tapa.hidden = false; avisar("fin");
   }
   async function reproducir() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!ctx) {
+      // iOS 17 o más: pedir la categoría "playback" hace sonar el audio con el teléfono en silencio
+      // (iOS silencia Web Audio en modo silencio: bug 237322 de WebKit).
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+      desbloquearSilencio();   // en el mismo toque del usuario, antes de crear el AudioContext
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
     if (ctx.state === "suspended") await ctx.resume();
     if (!buffer) { boton.textContent = TX.cargando; buffer = await decodificar(); }
     if (sonando) return;   // la lista y un toque pueden pedirlo a la vez
@@ -136,6 +154,14 @@ def pista(carpeta: Path, src_html: str, dur: float) -> bytes:
     buf = io.BytesIO()
     sonido.sf.write(buf, sonido.normalizar(sonido.mezclar(pistas, dur)), sonido.SR, format="MP3", subtype="MPEG_LAYER_III")
     return buf.getvalue()
+
+
+def mp3_silencio(dur: float = 0.1) -> str:
+    """Base64 de un MP3 de silencio muy corto (se incrusta y se reproduce en bucle como respaldo de audio
+    para iOS). No toca la pista principal: se sintetiza aparte con el mismo codificador."""
+    buf = io.BytesIO()
+    sonido.sf.write(buf, sonido.mezclar([], dur), sonido.SR, format="MP3", subtype="MPEG_LAYER_III")
+    return base64.b64encode(buf.getvalue()).decode()
 
 
 def fuentes_css() -> str:
@@ -199,8 +225,9 @@ def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
     if kjs:
         out = out.replace("</style>", "</style><script>" + kjs + "</script>", 1)
     m = SCRIPT_ENGINE_RE.search(out)       # se busca de nuevo: el texto cambió arriba
+    player_js = PLAYER_JS.replace("__SILENCIO_MP3__", mp3_silencio())
     motor = ("window.__timelines = {};\nconst TX = " + json.dumps(tx, ensure_ascii=False) + ";\n" + DIBUJAR_FORMULAS +
-             "Promise.all([document.fonts.ready, cargarFuentes]).then(() => {\n" + m.group(1) + "\n" + m.group(2) + "\n" + PLAYER_JS + "\n});")
+             "Promise.all([document.fonts.ready, cargarFuentes]).then(() => {\n" + m.group(1) + "\n" + m.group(2) + "\n" + player_js + "\n});")
     out = out[:m.start()] + (
         f'<script type="application/octet-stream" id="s2s-mp3">{mp3}</script>'
         f'<div id="s2s-barra"></div><div id="s2s-tapa"><button>{tx["tocar"]}</button></div>'
