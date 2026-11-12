@@ -117,13 +117,19 @@ PLAYER_JS = """
     tapa.hidden = true; avisar(pos < 0.1 ? "inicio" : "sigue"); requestAnimationFrame(bucle);
   }
   tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
-  root.addEventListener("click", () => {
+  function pausar() {
     if (!sonando) return;
     pos = ahora(); sonando = false; try { fuente.stop(); } catch (e) {}
     boton.textContent = TX.seguir; tapa.hidden = false; avisar("pausa");
+  }
+  root.addEventListener("click", pausar);
+  // la lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un toque,
+  // queda la tapa) o pausar (su capa de gestos tapa el video mientras suena, así que el toque llega por acá)
+  addEventListener("message", e => {
+    if (!e.data) return;
+    if (e.data.s2s === "play" && !sonando) reproducir().catch(() => {});
+    if (e.data.s2s === "pausa") pausar();
   });
-  // la lista de reproducción (index.html) pide arrancar el siguiente video; si el navegador exige un toque, queda la tapa
-  addEventListener("message", e => { if (e.data && e.data.s2s === "play" && !sonando) reproducir().catch(() => {}); });
   addEventListener("resize", encajar);
   encajar(); pintar(0);
   window.__s2s = { pintar, D, ahora, reproducir };   // para pruebas
@@ -253,21 +259,37 @@ body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,
 header { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:12px 24px; align-items:flex-end; justify-content:space-between; }
 h1 { font:800 clamp(24px,5vw,36px)/1.1 system-ui, sans-serif; margin:0; letter-spacing:-.01em; }
 .sub { color:var(--muted); margin:6px 0 0; max-width:60ch; }
-.hoy { color:var(--muted); font-size:13px; text-align:right; }
-.hoy b { display:block; font:800 28px system-ui, sans-serif; color:var(--fg); font-variant-numeric:tabular-nums; }
+.stats { display:flex; gap:24px; }
+.stat { color:var(--muted); font-size:13px; text-align:right; }
+.stat b { display:block; font:800 28px system-ui, sans-serif; color:var(--fg); font-variant-numeric:tabular-nums; }
 .barra { grid-column:1/-1; height:8px; border-radius:4px; background:var(--line); overflow:hidden; }
 .barra i { display:block; height:100%; width:0; background:var(--ok); transition:width .3s; }
 .player { display:flex; flex-direction:column; gap:12px; min-width:0; }
-.caja { width:100%; max-width:400px; aspect-ratio:9/16; margin:0 auto; border-radius:18px; overflow:hidden;
+.caja { position:relative; width:100%; max-width:400px; aspect-ratio:9/16; margin:0 auto; border-radius:18px; overflow:hidden;
   background:#000; border:1px solid var(--line); }
 .caja iframe { width:100%; height:100%; border:0; display:block; }
+/* capa de gestos: solo tapa el video mientras suena en una pantalla táctil; con la tapa del video a la vista
+   ("Tocar para ver", "Seguir") no está, así el toque llega al video y el navegador lo cuenta como gesto */
+#capa { position:absolute; inset:0; display:none; touch-action:none; }
+#capa.activa { display:block; }
 .ahora small { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
 .ahora span { font-weight:700; font-size:17px; }
 .ctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 button { font:600 14px system-ui, sans-serif; color:var(--fg); background:var(--card); border:1px solid var(--line);
   border-radius:10px; padding:9px 14px; cursor:pointer; }
-button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+button:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 button.prim { background:var(--accent); border-color:var(--accent); color:#fff; }
+.aviso { color:var(--ok); font-weight:600; }
+#expCaja { display:flex; flex-direction:column; gap:6px; }
+#expCaja small { color:var(--muted); }
+#expTxt { width:100%; min-height:140px; font:12px/1.4 ui-monospace, Consolas, monospace; color:var(--fg);
+  background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; resize:vertical; }
+.lado { display:flex; flex-direction:column; gap:12px; min-width:0; }
+#toca { width:100%; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; align-items:center;
+  text-align:left; padding:14px 16px; border-radius:14px; background:var(--accent); border-color:var(--accent); color:#fff; }
+#toca small { grid-column:1/-1; font-size:12px; text-transform:uppercase; letter-spacing:.06em; opacity:.85; }
+#toca b { font-size:18px; }
+#toca span { font-size:13px; opacity:.85; }
 ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; min-width:0; }
 li button { width:100%; display:grid; grid-template-columns:32px minmax(0,1fr) auto; gap:12px; align-items:center;
   text-align:left; padding:12px 14px; border-radius:14px; }
@@ -283,85 +305,158 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 <div class="wrap">
   <header>
     <div><h1>__TITULO__</h1><p class="sub">__SUB__</p></div>
-    <div class="hoy"><b id="nHoy">0 / 0</b><span id="lHoy"></span></div>
+    <div class="stats">
+      <div class="stat"><b id="nRacha">0</b><span id="lRacha"></span></div>
+      <div class="stat"><b id="nVistos">0 / 0</b><span id="lVistos"></span></div>
+    </div>
   </header>
   <div class="barra" aria-hidden="true"><i id="lleno"></i></div>
   <section class="player">
-    <div class="caja"><iframe id="v" allow="autoplay" title="video"></iframe></div>
+    <div class="caja"><iframe id="v" allow="autoplay" title="video"></iframe><div id="capa"></div></div>
     <div class="ahora"><small id="nAhora"></small><span id="tAhora"></span></div>
     <div class="ctrls">
       <button id="ant" type="button"></button>
       <button id="sig" type="button" class="prim"></button>
+    </div>
+    <div class="ctrls" id="ctrls2">
+      <button id="exp" type="button"></button>
       <button id="cero" type="button"></button>
+      <span id="aviso" class="aviso" role="status"></span>
     </div>
   </section>
-  <ol id="lista"></ol>
+  <div class="lado">
+    <button id="toca" type="button"><small id="lToca"></small><b id="tToca"></b><span id="nToca"></span></button>
+    <ol id="lista"></ol>
+  </div>
 </div>
+<script>__PROGRESO__</script>
 <script>
-const VIDEOS = __VIDEOS__, TX = __TX__;
-const CLAVE = "s2s:" + document.title, hoy = new Date().toLocaleDateString("sv");
-let st = { dia: hoy, vistos: [], cur: 0 };
-try { const s = JSON.parse(localStorage.getItem(CLAVE) || "null"); if (s) { st = s; if (st.dia !== hoy) { st.dia = hoy; st.vistos = []; } } } catch (e) {}
+const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso;
+const CLAVE = "s2s:" + document.title, hoy = () => P.fechaLocal(new Date());
+let st = P.vacio(VIDEOS);
+try { st = P.cargar(localStorage.getItem(CLAVE), VIDEOS); } catch (e) {}
 const guardar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(st)); } catch (e) {} };
-const $ = id => document.getElementById(id), v = $("v");
+guardar();   // deja guardado el formato nuevo si venía del viejo
+const $ = id => document.getElementById(id), v = $("v"), capa = $("capa");
+const pos = id => Math.max(0, VIDEOS.findIndex(x => x.id === id));
 const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
-$("ant").textContent = TX.ant; $("sig").textContent = TX.sig; $("cero").textContent = TX.cero; $("lHoy").textContent = TX.hoy;
+$("ant").textContent = TX.ant; $("sig").textContent = TX.sig; $("cero").textContent = TX.cero;
+$("exp").textContent = TX.exportar; $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos;
+function vistosAlgunaVez() {
+  const s = new Set(); for (const f in st.dias) for (const id of st.dias[f]) s.add(id); return s;
+}
 function pintar() {
+  const cur = pos(st.cur), vistos = vistosAlgunaVez(), toca = P.queTocaHoy(st, VIDEOS, hoy());
   const ol = $("lista"); ol.textContent = "";
   VIDEOS.forEach((x, i) => {
     const li = document.createElement("li"), b = document.createElement("button");
-    li.classList.toggle("cur", i === st.cur); li.classList.toggle("visto", st.vistos.includes(i));
+    li.classList.toggle("cur", i === cur); li.classList.toggle("visto", vistos.has(x.id));
     b.type = "button";
-    const n = document.createElement("span"); n.className = "num"; n.textContent = st.vistos.includes(i) ? "✓" : i + 1;
+    const n = document.createElement("span"); n.className = "num"; n.textContent = vistos.has(x.id) ? "✓" : i + 1;
     const t = document.createElement("span"); t.className = "t";
     const tb = document.createElement("b"); tb.textContent = x.titulo;
     const ts = document.createElement("span"); ts.textContent = x.pregunta; t.append(tb, ts);
     const d = document.createElement("span"); d.className = "dur"; d.textContent = mmss(x.duracion);
     b.append(n, t, d); b.onclick = () => abrir(i, true); li.append(b); ol.append(li);
   });
-  $("nHoy").textContent = `${st.vistos.length} / ${VIDEOS.length}`;
-  $("lleno").style.width = (100 * st.vistos.length / VIDEOS.length) + "%";
-  $("nAhora").textContent = TX.de.replace("{n}", st.cur + 1).replace("{t}", VIDEOS.length);
-  $("tAhora").textContent = VIDEOS[st.cur].titulo;
-  $("ant").disabled = st.cur === 0; $("sig").disabled = st.cur === VIDEOS.length - 1;
+  const it = pos(toca);
+  $("tToca").textContent = VIDEOS[it].titulo; $("toca").onclick = () => abrir(it, true);
+  $("nToca").textContent = TX.de.replace("{n}", it + 1).replace("{t}", VIDEOS.length);
+  const r = P.racha(st, hoy());
+  $("nRacha").textContent = r; $("lRacha").textContent = r === 1 ? TX.racha1 : TX.racha;
+  const n = VIDEOS.filter(x => vistos.has(x.id)).length;
+  $("nVistos").textContent = `${n} / ${VIDEOS.length}`;
+  $("lleno").style.width = (100 * n / VIDEOS.length) + "%";
+  $("nAhora").textContent = TX.de.replace("{n}", cur + 1).replace("{t}", VIDEOS.length);
+  $("tAhora").textContent = VIDEOS[cur].titulo;
+  $("ant").disabled = cur === 0; $("sig").disabled = cur === VIDEOS.length - 1;
 }
-let arrancar = false;
+// capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
+const tactil = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+let arrancar = false, sonando = false, ini = null;
+const ponerCapa = () => capa.classList.toggle("activa", tactil && sonando);
 function abrir(i, auto) {
-  st.cur = Math.max(0, Math.min(VIDEOS.length - 1, i)); guardar();
-  arrancar = auto; v.src = VIDEOS[st.cur].archivo; pintar();
+  if (i < 0 || i >= VIDEOS.length) return;
+  st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
+  arrancar = auto; sonando = false; ponerCapa(); v.src = VIDEOS[i].archivo; pintar();
 }
-// el video avisa con postMessage cuándo está listo y cuándo termina (cada .html también se ve solo)
+capa.addEventListener("pointerdown", e => {
+  ini = { x: e.clientX, y: e.clientY };
+  try { capa.setPointerCapture(e.pointerId); } catch (err) {}
+});
+capa.addEventListener("pointercancel", () => { ini = null; });
+capa.addEventListener("pointerup", e => {
+  if (!ini) return;
+  const dx = e.clientX - ini.x, dy = e.clientY - ini.y; ini = null;
+  if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
+  else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
+});
+// el video avisa con postMessage cuándo está listo, cuándo suena, se pausa y termina (cada .html también se ve solo)
 addEventListener("message", e => {
   if (e.source !== v.contentWindow || !e.data || !e.data.s2s) return;
-  if (e.data.s2s.tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
-  if (e.data.s2s.tipo !== "fin") return;
-  if (!st.vistos.includes(st.cur)) st.vistos.push(st.cur);
-  guardar();
-  if (st.cur < VIDEOS.length - 1) abrir(st.cur + 1, true); else pintar();
+  const tipo = e.data.s2s.tipo;
+  if (tipo === "inicio" || tipo === "sigue") { sonando = true; ponerCapa(); return; }
+  sonando = false; ponerCapa();
+  if (tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
+  if (tipo !== "fin") return;
+  const cur = pos(st.cur);
+  st = P.marcarVisto(st, VIDEOS[cur].id, hoy()); guardar();
+  if (cur < VIDEOS.length - 1) abrir(cur + 1, true); else pintar();
 });
-$("ant").onclick = () => abrir(st.cur - 1, true);
-$("sig").onclick = () => abrir(st.cur + 1, true);
+$("ant").onclick = () => abrir(pos(st.cur) - 1, true);
+$("sig").onclick = () => abrir(pos(st.cur) + 1, true);
+function avisar(texto) {
+  const a = $("aviso"); a.textContent = texto;
+  clearTimeout(avisar.t); avisar.t = setTimeout(() => { a.textContent = ""; }, 3000);
+}
+function mostrarJson(texto) {
+  let caja = $("expCaja");
+  if (!caja) {
+    caja = document.createElement("div"); caja.id = "expCaja";
+    const s = document.createElement("small"); s.textContent = TX.copiaManual;
+    const ta = document.createElement("textarea"); ta.id = "expTxt"; ta.readOnly = true; ta.setAttribute("aria-label", TX.exportar);
+    ta.onfocus = () => ta.select();
+    caja.append(s, ta); $("ctrls2").after(caja);
+  }
+  const ta = $("expTxt"); ta.value = texto; ta.focus(); ta.select();
+}
+$("exp").onclick = async () => {
+  const texto = JSON.stringify(P.exportar(st, { titulo: document.title, fecha: hoy(), generado: new Date().toISOString() }), null, 2);
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("sin portapapeles");
+    await navigator.clipboard.writeText(texto);
+    avisar(TX.copiado);
+  } catch (e) { mostrarJson(texto); }
+};
 $("cero").onclick = () => {
   if (document.getElementById("conf")) return;
   const caja = document.createElement("span"); caja.id = "conf"; caja.className = "ctrls";
   const q = document.createElement("span"); q.textContent = TX.seguro;
   const si = document.createElement("button"); si.type = "button"; si.className = "prim"; si.textContent = TX.si;
   const no = document.createElement("button"); no.type = "button"; no.textContent = TX.no;
-  si.onclick = () => { st.vistos = []; guardar(); caja.remove(); abrir(0, false); };
+  si.onclick = () => { st = P.vacio(VIDEOS); guardar(); caja.remove(); abrir(0, false); };
   no.onclick = () => caja.remove();
   caja.append(q, si, no); $("cero").after(caja);
 };
-abrir(Math.min(st.cur || 0, VIDEOS.length - 1), false);
+abrir(pos(P.queTocaHoy(st, VIDEOS, hoy())), false);   // se abre lo que toca hoy
 </script>
 </body></html>
 """
 
 LISTA = {
-    "es": {"hoy": "vistos hoy", "de": "Video {n} de {t}", "ant": "Anterior", "sig": "Siguiente",
-           "cero": "Empezar el día de cero", "seguro": "¿Desmarcar los vistos de hoy?", "si": "Sí", "no": "No"},
-    "en": {"hoy": "watched today", "de": "Video {n} of {t}", "ant": "Previous", "sig": "Next",
-           "cero": "Start the day over", "seguro": "Clear today's watched marks?", "si": "Yes", "no": "No"},
+    "es": {"toca": "Hoy toca", "racha": "días seguidos", "racha1": "día seguido", "vistos": "temas vistos",
+           "de": "Video {n} de {t}", "ant": "Anterior", "sig": "Siguiente",
+           "cero": "Borrar progreso", "seguro": "¿Borrar todo el progreso?", "si": "Sí", "no": "No",
+           "exportar": "Exportar progreso", "copiado": "Copiado al portapapeles",
+           "copiaManual": "No se pudo copiar solo: seleccioná este texto y copialo."},
+    "en": {"toca": "Up today", "racha": "days in a row", "racha1": "day in a row", "vistos": "topics watched",
+           "de": "Video {n} of {t}", "ant": "Previous", "sig": "Next",
+           "cero": "Clear progress", "seguro": "Clear all progress?", "si": "Yes", "no": "No",
+           "exportar": "Export progress", "copiado": "Copied to the clipboard",
+           "copiaManual": "Couldn't copy it automatically: select this text and copy it."},
 }
+
+PROGRESO_JS = Path(__file__).with_name("progreso.js")
 
 
 def _json_en_script(x) -> str:
@@ -369,14 +464,22 @@ def _json_en_script(x) -> str:
 
 
 def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -> Path:
-    """videos: [{archivo, titulo, pregunta, duracion}] en el orden en que se ven.
-    La lista reproduce cada video en un iframe, pasa al siguiente cuando termina y marca los vistos del día
-    (en el navegador, con localStorage; si no está disponible, la lista anda igual sin recordar)."""
-    datos = [{"archivo": v["archivo"], "titulo": v["titulo"], "pregunta": v.get("pregunta", ""),
-              "duracion": round(float(v["duracion"]), 1)} for v in videos]
-    s = (INDICE.replace("__IDIOMA__", idioma).replace("__TITULO__", html.escape(titulo))
-         .replace("__SUB__", html.escape(TEXTOS[idioma]["sub"]))
-         .replace("__VIDEOS__", _json_en_script(datos)).replace("__TX__", _json_en_script(LISTA[idioma])))
+    """videos: [{id, archivo, titulo, pregunta, duracion}] en el orden en que se ven (sin id, se usa el
+    nombre del archivo). La lista reproduce cada video en un iframe, pasa al siguiente cuando termina y
+    guarda qué temas se vieron cada día (en el navegador, con localStorage; si no está disponible, la
+    lista anda igual sin recordar). La lógica del progreso está en progreso.js y va embebida."""
+    datos = [{"id": str(v.get("id") or Path(v["archivo"]).stem), "archivo": v["archivo"], "titulo": v["titulo"],
+              "pregunta": v.get("pregunta", ""), "duracion": round(float(v["duracion"]), 1)} for v in videos]
+    ids = [d["id"] for d in datos]
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"ids de tema repetidos en la lista: {ids}")
+    progreso = PROGRESO_JS.read_text(encoding="utf-8")
+    if "</script" in progreso.lower():
+        raise ValueError("progreso.js no puede contener </script")
+    valores = {"IDIOMA": idioma, "TITULO": html.escape(titulo), "SUB": html.escape(TEXTOS[idioma]["sub"]),
+               "VIDEOS": _json_en_script(datos), "TX": _json_en_script(LISTA[idioma]), "PROGRESO": progreso}
+    # una sola pasada: un título que contenga "__TX__" no se reemplaza dos veces
+    s = re.sub(r"__(IDIOMA|TITULO|SUB|VIDEOS|TX|PROGRESO)__", lambda m: valores[m[1]], INDICE)
     destino.write_text(s, encoding="utf-8")
     return destino
 

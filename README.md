@@ -33,7 +33,10 @@ your material ──► inventory of statements ──► checked by code (verba
 - The voice is [Piper](https://github.com/OHF-Voice/piper1-gpl) and runs locally. The time of each
   word comes from the voice model itself, so the animation lands on the word that names it.
 - Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your
-  computer or phone, offline. The playlist is at `scroll-to-study/videos/index.html`.
+  computer or phone, offline. The playlist is at `scroll-to-study/videos/index.html`. It remembers, in
+  that browser only, which days you watched each video, opens the one that is up today and shows your
+  streak; "Export progress" copies that history as JSON so you can share it. On a touch screen, swipe
+  up or down on a playing video for the next or previous one.
 - With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
   each type of exercise and the general method and traps, labeled as "general method".
 
