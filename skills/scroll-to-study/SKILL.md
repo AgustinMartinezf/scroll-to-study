@@ -92,6 +92,11 @@ the quote supports exactly what the statement claims. Write `T/respaldo.json` as
 the `motivo` in those cases. Then run `S2S respaldo -t T` again to apply it: the statements with
 `respalda` false move to "comprobar" with that reason.
 
+The verdict is stored in each statement (key `respaldo`, do not edit it) and `respaldo.json` is renamed
+to `respaldo_aplicado.json`. Running `verificar` again keeps the verdicts; if you add statements or
+change a statement's text or quote, `verificar` says how many are pending and `S2S respaldo -t T` asks
+only for those.
+
 Then handle them like the rest of "comprobar". In project mode, show them to the person and only keep
 the ones they confirm (`"aprobado": true` leaves a statement in "ok" and is respected here too). In
 course mode nothing is approved by hand, so a statement whose quote does not back it does not reach any

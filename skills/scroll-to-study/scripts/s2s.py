@@ -40,7 +40,8 @@ from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
 from etapas import (IDIOMAS, MODOS, aplicar_respaldo, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
                     leer, modo_de, textos,
-                    pedido_guion, pedido_respaldo, resumen_inventario, separar_errores)
+                    pedido_guion, pedido_respaldo, pendientes_respaldo, reaplicar_respaldo,
+                    resumen_inventario, separar_errores)
 
 ICONOS = AQUI / "iconos"          # solo los íconos permitidos (y que existen en el motor)
 MAX_INTENTOS = 3
@@ -202,9 +203,16 @@ def cmd_verificar(a: argparse.Namespace) -> int:
             if x["estado"] == "general":
                 x["estado"] = "comprobar"
                 x["motivos"].append("en un proyecto todo tiene que salir del material")
+    # fuentes.verificar recalcula los estados desde cero: los juicios de respaldo guardados se aplican de nuevo
+    sin_respaldo = reaplicar_respaldo(inv)
     inv["origen"] = o
     escribir(t / "inventario.json", inv)
     resumen_inventario(inv)
+    if sin_respaldo:
+        print(f"{len(sin_respaldo)} siguen en «comprobar» porque la cita no las respalda: {', '.join(sin_respaldo)}")
+    pend = len(pendientes_respaldo(inv))
+    if pend:
+        print(f"{pend} afirmaciones en «ok» sin juicio de respaldo → corré: s2s.py respaldo -t {t}")
     gen = sum(x["estado"] == "general" for x in inv["afirmaciones"])
     if gen:
         print(f"{gen} métodos o trampas generales (no salen del material; el video los marca)")
@@ -219,12 +227,16 @@ def cmd_respaldo(a: argparse.Namespace) -> int:
     pedido = t / "respaldo_pedido.txt"
     respuesta = t / "respaldo.json"
     if not respuesta.exists():
-        # fase a: sin respaldo.json, pedir el juicio de Claude solo para las afirmaciones en «ok»
-        oks = [x for x in inv["afirmaciones"] if x.get("estado") == "ok"]
+        # fase a: sin respaldo.json, pedir el juicio de Claude para las afirmaciones en «ok» que no lo tienen
+        pend = pendientes_respaldo(inv)
+        if not pend:
+            print("Todas las afirmaciones en «ok» ya tienen juicio de respaldo; no hay nada que pedir.")
+            registrar(t, "respaldo", fase="pedido", afirmaciones=0)
+            return 0
         pedido.write_text(pedido_respaldo(inv), encoding="utf-8")
-        print(f"{len(oks)} afirmaciones en «ok» → revisá {pedido}")
+        print(f"{len(pend)} afirmaciones en «ok» sin juicio → revisá {pedido}")
         print(f"Respondé en {respuesta} y volvé a correr: s2s.py respaldo -t {t}")
-        registrar(t, "respaldo", fase="pedido", afirmaciones=len(oks))
+        registrar(t, "respaldo", fase="pedido", afirmaciones=len(pend))
         return 0
     # fase b: con respaldo.json, aplicarlo
     errores, movidos = aplicar_respaldo(inv, leer(respuesta))
@@ -234,6 +246,9 @@ def cmd_respaldo(a: argparse.Namespace) -> int:
         registrar(t, "respaldo", fase="aplicar", error="|".join(errores))
         return 1
     escribir(t / "inventario.json", inv)
+    # el juicio ya quedó guardado en cada afirmación: respaldo.json se consume, así la próxima corrida
+    # pide solo las afirmaciones nuevas o cambiadas en vez de chocar con una respuesta vieja
+    respuesta.replace(t / "respaldo_aplicado.json")
     print(f"{len(movidos)} afirmaciones pasan a «comprobar» porque la cita no las respalda"
           + (f": {', '.join(movidos)}" if movidos else ""))
     registrar(t, "respaldo", fase="aplicar", comprobar=len(movidos))
@@ -242,6 +257,10 @@ def cmd_respaldo(a: argparse.Namespace) -> int:
 
 def cmd_temas(a: argparse.Namespace) -> int:
     t = a.trabajo
+    pend = pendientes_respaldo(leer(t / "inventario.json"))
+    if pend:
+        print(f"AVISO  {len(pend)} afirmaciones en «ok» sin juicio de respaldo ({', '.join(x['id'] for x in pend)}):"
+              f" corré s2s.py respaldo -t {t} antes de armar los temas")
     temas = filtrar_temas(leer(t / "temas.json"), leer(t / "inventario.json"))
     escribir(t / "temas.json", temas)
     for x in temas["temas"]:

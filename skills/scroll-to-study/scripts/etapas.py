@@ -146,12 +146,50 @@ INSTRUCCIONES_RESPALDO = (
 )
 
 
+def respaldo_vigente(a: dict[str, Any]) -> dict[str, Any] | None:
+    """El juicio guardado en la afirmación, si sigue valiendo: se juzgó este mismo texto con esta misma
+    cita. Si cambió alguno de los dos, el juicio ya no dice nada y hay que pedirlo de nuevo."""
+    r = a.get("respaldo")
+    if isinstance(r, dict) and r.get("texto") == a.get("texto") and r.get("cita") == a.get("cita", ""):
+        return r
+    return None
+
+
+def pendientes_respaldo(inv: dict[str, Any]) -> list[dict[str, Any]]:
+    """Afirmaciones en «ok» sin un juicio de respaldo vigente."""
+    return [a for a in inv["afirmaciones"] if a.get("estado") == "ok" and respaldo_vigente(a) is None]
+
+
+def _no_respalda(a: dict[str, Any], motivo: str) -> bool:
+    """Pasa la afirmación a «comprobar» por falta de respaldo, salvo «aprobado» true (lo revisó una persona)."""
+    if a.get("aprobado") is True:
+        return False
+    a["estado"] = "comprobar"
+    a.setdefault("motivos", []).append("la cita no respalda la afirmación" + (f": {motivo}" if motivo else ""))
+    return True
+
+
+def reaplicar_respaldo(inv: dict[str, Any]) -> list[str]:
+    """verificar recalcula estado y motivos desde cero: sin esto, volver a verificar devolvería a «ok» las
+    afirmaciones que Claude juzgó sin respaldo. Aplica de nuevo los juicios vigentes y borra los viejos
+    (texto o cita cambiaron), que quedan pendientes. Devuelve los ids que vuelven a «comprobar»."""
+    movidos = []
+    for a in inv["afirmaciones"]:
+        if "respaldo" not in a:
+            continue
+        r = respaldo_vigente(a)
+        if r is None:
+            del a["respaldo"]
+        elif a.get("estado") == "ok" and r["respalda"] is False and _no_respalda(a, r.get("motivo", "")):
+            movidos.append(a["id"])
+    return movidos
+
+
 def pedido_respaldo(inv: dict[str, Any]) -> str:
-    """Texto para que Claude juzgue si la cita respalda la afirmación. Solo las afirmaciones en «ok»:
-    las demás ya están en «comprobar» y no entran a ningún video."""
-    oks = [a for a in inv["afirmaciones"] if a.get("estado") == "ok"]
+    """Texto para que Claude juzgue si la cita respalda la afirmación. Solo las afirmaciones en «ok» que
+    todavía no tienen juicio: las demás están en «comprobar» (no entran a ningún video) o ya se juzgaron."""
     partes = [INSTRUCCIONES_RESPALDO, ""]
-    for a in oks:
+    for a in pendientes_respaldo(inv):
         partes.append(a["id"])
         partes.append(f"  afirmación: {a['texto']}")
         partes.append(f"  cita: {a.get('cita', '')}")
@@ -159,28 +197,36 @@ def pedido_respaldo(inv: dict[str, Any]) -> str:
     return "\n".join(partes)
 
 
-def aplicar_respaldo(inv: dict[str, Any], respaldo: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Aplica el juicio de Claude. «respalda» false pasa la afirmación a «comprobar» con el motivo,
-    salvo «aprobado» true (lo revisó una persona). Devuelve (errores, ids movidos a comprobar);
-    si faltan o sobran respuestas respecto de las afirmaciones en «ok», no aplica nada."""
-    oks = {a["id"] for a in inv["afirmaciones"] if a.get("estado") == "ok"}
-    faltan = sorted(oks - set(respaldo))
-    sobran = sorted(set(respaldo) - oks)
+def aplicar_respaldo(inv: dict[str, Any], respaldo: Any) -> tuple[list[str], list[str]]:
+    """Aplica el juicio de Claude y lo guarda en cada afirmación (con el texto y la cita juzgados), así
+    sobrevive a otro verificar. «respalda» false pasa la afirmación a «comprobar» con el motivo, salvo
+    «aprobado» true. Devuelve (errores, ids movidos a comprobar); ante cualquier error no aplica nada:
+    faltan o sobran respuestas respecto de las pendientes, o una respuesta está mal formada."""
+    if not isinstance(respaldo, dict):
+        return ["respaldo.json tiene que ser un objeto {\"<id>\": {\"respalda\": ..., \"motivo\": ...}}"], []
+    pend = {a["id"] for a in pendientes_respaldo(inv)}
+    faltan = sorted(pend - set(respaldo))
+    sobran = sorted(set(respaldo) - pend)
     errores = []
     if faltan:
-        errores.append(f"faltan respuestas para afirmaciones en «ok»: {', '.join(faltan)}")
+        errores.append(f"faltan respuestas para afirmaciones pendientes: {', '.join(faltan)}")
     if sobran:
-        errores.append(f"sobran respuestas (no son afirmaciones en «ok»): {', '.join(sobran)}")
+        errores.append(f"sobran respuestas (no son afirmaciones en «ok» pendientes de juicio): {', '.join(sobran)}")
+    for i, r in sorted(respaldo.items()):
+        if not isinstance(r, dict) or not isinstance(r.get("respalda"), bool):
+            errores.append(f"{i}: «respalda» tiene que ser true o false (sin comillas)")
+        elif r["respalda"] is False and not str(r.get("motivo") or "").strip():
+            errores.append(f"{i}: falta «motivo» (es obligatorio cuando «respalda» es false)")
     if errores:
         return errores, []
     movidos = []
     for a in inv["afirmaciones"]:
         r = respaldo.get(a["id"])
-        if r and r.get("respalda") is False and a.get("aprobado") is not True:
-            a["estado"] = "comprobar"
-            a.setdefault("motivos", [])
-            motivo = (r.get("motivo") or "").strip()
-            a["motivos"].append("la cita no respalda la afirmación" + (f": {motivo}" if motivo else ""))
+        if r is None:
+            continue
+        motivo = str(r.get("motivo") or "").strip()
+        a["respaldo"] = {"respalda": r["respalda"], "motivo": motivo, "texto": a["texto"], "cita": a.get("cita", "")}
+        if r["respalda"] is False and _no_respalda(a, motivo):
             movidos.append(a["id"])
     return [], movidos
 
