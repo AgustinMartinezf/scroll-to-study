@@ -35,8 +35,11 @@ Talk to the person in their language. The commands and JSON keys are in Spanish;
 
 `instalar` downloads the voice for that language (Piper, about 65 MB), gsap and KaTeX to a data
 folder and checks that the voice works. Run it again with the other language if they want videos in
-both. If it fails, show the error to the person; do not go on to the video stage without it (the
-script stages work without the voice).
+both. If it fails, run `S2S diagnostico`: it prints one line per requirement (Python version, each
+package, the voice of each language, gsap, KaTeX), either "ok" or the command that fixes it. Show the
+lines that are not "ok" to the person and run the fixes they agree to; do not go on to the video stage
+until the required ones are ok (the script stages work without the voice). Playwright and ffmpeg show
+up as optional: they are only needed for step 7.
 
 ## 1. Material
 
@@ -146,6 +149,20 @@ earlier in the script or add a short sentence after it, validate again and redo 
 
 When done, say in two or three lines how many videos were made, which were not and why, and where to
 open the playlist. Suggest watching one a day, in order.
+
+## 7. On the phone (optional)
+
+The `.html` videos do not play from the Files app on an iPhone (its preview does not run JavaScript).
+If the person wants to watch them on their phone, offer to export them to MP4:
+
+    S2S mp4 -t T                    # every video in T/videos/ -> T/mp4/t01.mp4, …
+    S2S mp4 -t T --tema t01         # just one; --alto 1280 (the default) sets the height
+
+It skips the MP4s that are newer than their video, so after redoing a video run it again. It needs
+Playwright with its Chromium and ffmpeg; if they are missing it prints how to install them and stops
+without touching anything: show those commands to the person and run them only if they agree. The
+MP4s go to the phone like any file (cable, AirDrop, or sending them to themselves on WhatsApp) and
+play offline in Photos or WhatsApp. It takes about as long as the video lasts, or longer, per video.
 
 ## What you do not do
 - Do not write spec.json, script.json, gaps.json or timing.json by hand: the scripts generate them.

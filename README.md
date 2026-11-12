@@ -88,6 +88,16 @@ scroll-to-study/
   registro.jsonl      when and how many times each stage ran
 ```
 
+## On your phone
+
+The `.html` videos open in a phone's browser, but on an iPhone they do not play from the Files app,
+because its preview does not run JavaScript. To watch them anywhere, ask Claude to export them to MP4
+(or run `s2s.py mp4 -t scroll-to-study` yourself): each video becomes `scroll-to-study/mp4/t01.mp4`, …,
+which you can send to your phone and watch offline in Photos or WhatsApp. It is optional and needs
+`playwright` (`pip install playwright`, then `playwright install chromium`) and
+[ffmpeg](https://ffmpeg.org); if they are missing, the command tells you how to install them.
+`s2s.py diagnostico` lists what is installed and what is missing.
+
 ## Known limits
 
 - The English voice (`hfc_male`) was trained on a CC BY-NC-SA dataset: fine for studying, not for
@@ -110,7 +120,8 @@ python -m pip install numpy soundfile pypdf pytest
 python -m pytest -q tests
 ```
 
-`tools/mp4.py VIDEO.html OUT.mp4` exports a video to MP4 (needs `playwright` and `ffmpeg`).
+`tools/mp4.py VIDEO.html OUT.mp4` exports a single video to MP4 (needs `playwright` and `ffmpeg`; it
+calls the same code as `s2s.py mp4`).
 `tools/revisar.py VIDEO.html` opens a video in Chromium and checks what the style guide asks for: that
 the animation follows the audio, that nothing important falls outside the TikTok/Reels/Shorts safe
 zones, and that the picture never stays still for more than a second (needs `playwright`).
@@ -120,13 +131,15 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 
 | File | What it does |
 |---|---|
-| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, temas, pedido, guion, video, videos, estado |
+| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, respaldo, temas, pedido, guion, video, videos, estado, mp4, diagnostico |
 | `fuentes.py` | Numbers the material and checks each statement against its quote |
 | `etapas.py` | Modes, languages and formats; builds the request for each script |
 | `compile.py` | Validates the script and computes what the model does not decide (layout, pauses, pronunciation) |
 | `voice.py` | Voice with Piper and per-word timings |
 | `engine.py` + `engine.js` | Builds the animation (GSAP); looks come from `temas/` |
 | `reproductor.py` + `sonido.py` | Mixes the audio and outputs a `.html` that plays by itself |
+| `mp4.py` | Optional: exports a video `.html` to `.mp4` with Playwright and ffmpeg |
+| `diagnostico.py` | Checks Python, the packages, the voices, gsap and KaTeX, and says how to fix what is missing |
 
 ## License
 
