@@ -11,6 +11,7 @@ comprobar con código y fabrica los videos:
   python3 s2s.py temas     -t T                 # filtra T/temas.json (solo afirmaciones verificadas)
   python3 s2s.py pedido    -t T --tema t01      # el pedido del guion: el tema y SOLO sus afirmaciones
   python3 s2s.py guion     -t T --tema t01      # valida T/t01/guion.json; si está ok escribe spec.json
+  python3 s2s.py preguntas -t T --tema t01      # sin T/t01/preguntas.json, el pedido; con él, lo valida
   python3 s2s.py video     -t T --tema t01      # voz + animación -> T/videos/t01.html
   python3 s2s.py videos    -t T [--titulo ...]  # todos los guiones listos + T/videos/index.html
   python3 s2s.py estado    -t T
@@ -42,7 +43,7 @@ from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
 from etapas import (IDIOMAS, MODOS, aplicar_respaldo, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
                     leer, modo_de, textos,
-                    pedido_guion, pedido_respaldo, pendientes_respaldo, reaplicar_respaldo,
+                    pedido_guion, pedido_preguntas, pedido_respaldo, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
                     resumen_inventario, separar_errores)
 
 ICONOS = AQUI / "iconos"          # solo los íconos permitidos (y que existen en el motor)
@@ -315,6 +316,57 @@ def cmd_guion(a: argparse.Namespace) -> int:
     return 0 if not errores else 1
 
 
+def _huella(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def cmd_preguntas(a: argparse.Namespace) -> int:
+    """En dos tiempos, como pedido y guion: sin preguntas.json imprime el pedido; con él, lo valida."""
+    t, carpeta = a.trabajo, a.trabajo / a.tema
+    temas = leer(t / "temas.json")["temas"]
+    tema = next((x for x in temas if x["id"] == a.tema), None)
+    if tema is None:
+        print(f"no existe el tema «{a.tema}» en {t / 'temas.json'}")
+        return 1
+    archivo = carpeta / "preguntas.json"
+    inv = leer(t / "inventario.json")
+    if not archivo.exists():
+        print(pedido_preguntas(inv, temas, a.tema, archivo, modo_de(t), idioma_de(t)))
+        registrar(t, "preguntas", tema=a.tema, fase="pedido")
+        return 0
+    reporte = carpeta / "preguntas_reporte.json"
+    intento = (leer(reporte).get("intentos", 0) if reporte.exists() else 0) + 1
+    try:
+        errores, avisos = validar_preguntas(leer(archivo), inv, tema)
+    except json.JSONDecodeError as e:
+        errores, avisos = [f"el JSON no se pudo leer: {e}"], []
+    arreglar, preguntar = separar_errores(errores)
+    # la huella dice qué versión de preguntas.json se validó: si cambia después, estado lo nota
+    escribir(reporte, {"errores": errores, "avisos": avisos, "intentos": intento, "huella": _huella(archivo)})
+    for m in avisos: print("AVISO     ", m)
+    for m in arreglar: print("ARREGLAR  ", m)
+    for m in preguntar: print("PREGUNTAR ", m)
+    if not errores:
+        print(f"ok en el intento {intento}: preguntas validadas en {archivo} (todavía no salen en el video)")
+    elif arreglar and intento >= MAX_INTENTOS:
+        print(f"\nYa van {intento} intentos: no sigas corrigiendo estas preguntas; contale a la persona y pasá al siguiente.")
+    registrar(t, "preguntas", tema=a.tema, fase="validar", intento=intento, errores=len(arreglar),
+              preguntar=len(preguntar), avisos=len(avisos), ok=not errores)
+    return 0 if not errores else 1
+
+
+def estado_preguntas(carpeta: Path) -> str:
+    archivo, reporte = carpeta / "preguntas.json", carpeta / "preguntas_reporte.json"
+    if not archivo.exists():
+        return "sin preguntas"
+    rep = leer(reporte) if reporte.exists() else {}
+    if rep.get("huella") != _huella(archivo):
+        return "preguntas sin validar"
+    if rep["errores"]:
+        return f"preguntas con {len(rep['errores'])} errores"
+    return "preguntas validadas" + (f" ({len(rep['avisos'])} avisos)" if rep["avisos"] else "")
+
+
 # ---------------------------------------------------------------------------
 # de los guiones a los videos
 # ---------------------------------------------------------------------------
@@ -379,14 +431,15 @@ def cmd_estado(a: argparse.Namespace) -> int:
     t = a.trabajo
     for x in leer(t / "temas.json")["temas"]:
         r = t / x["id"] / "reporte.json"
+        preguntas = estado_preguntas(t / x["id"])
         if not r.exists():
-            print(f"  {x['id']} {x['titulo']:32} sin guion"); continue
+            print(f"  {x['id']} {x['titulo']:32} sin guion; {preguntas}"); continue
         rep = leer(r)
         if (t / x["id"] / "spec.json").exists() and not rep["errores"]:
             est = "video listo" if (t / "videos" / f"{x['id']}.html").exists() else "guion listo"
         else:
             est = f"{len(rep['errores'])} errores"
-        print(f"  {x['id']} {x['titulo']:32} {est}, {rep['intentos']} intento(s)")
+        print(f"  {x['id']} {x['titulo']:32} {est}, {rep['intentos']} intento(s); {preguntas}")
     return 0
 
 
@@ -441,7 +494,7 @@ def cmd_diagnostico(a: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion",
+    ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion", "preguntas",
                                       "video", "videos", "estado", "mp4", "diagnostico"])
     ap.add_argument("-t", "--trabajo", type=Path)
     ap.add_argument("--repo", type=Path)
@@ -461,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("pasá -t CARPETA_DE_TRABAJO")
     if a.etapa == "corpus" and not a.repo and not a.doc:
         ap.error("pasá --repo y/o --doc")
-    if a.etapa in ("pedido", "guion", "video") and not a.tema:
+    if a.etapa in ("pedido", "guion", "preguntas", "video") and not a.tema:
         ap.error("pasá --tema")
     if a.etapa == "mp4" and not 160 <= a.alto <= 3840:
         ap.error("--alto va de 160 a 3840")

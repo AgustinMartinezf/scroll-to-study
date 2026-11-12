@@ -110,12 +110,22 @@ def filtrar_temas(temas: dict[str, Any], inv: dict[str, Any]) -> dict[str, Any]:
     return temas
 
 
+def _afirmaciones_del_tema(inv: dict[str, Any], tema: dict[str, Any]) -> list[dict[str, Any]]:
+    return [a for a in inv["afirmaciones"] if a["id"] in tema["afirmaciones"]]
+
+
+def _lista_afirmaciones(afirm: list[dict[str, Any]], idioma: str) -> str:
+    general = IDIOMAS[idioma]["general_pedido"]
+    return "\n".join(f"- {a['id']}" + (f" ({general})" if a["estado"] == "general" else "") + f": {a['texto']}"
+                     for a in afirm)
+
+
 def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str, modo: str = "proyecto",
                  idioma: str = "es") -> str:
     """El pedido de un guion: el tema y SOLO sus afirmaciones verificadas."""
     idx = next(i for i, t in enumerate(temas) if t["id"] == tema_id)
     tema = temas[idx]
-    afirm = [a for a in inv["afirmaciones"] if a["id"] in tema["afirmaciones"]]
+    afirm = _afirmaciones_del_tema(inv, tema)
     manana = temas[idx + 1]["titulo"] if idx + 1 < len(temas) else "repaso general"
     i = IDIOMAS[idioma]; m = i[modo]
     formato = elegir_formato(tema, afirm, modo)
@@ -123,8 +133,107 @@ def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str,
             f"FORMATO: {formato} ({FORMATOS[formato]})\n"
             f"Tema: {tema['titulo']}\n{m['pregunta']}: {tema['pregunta']}\n"
             f"Tema de mañana: {manana}\nCIERRE: {m['cierre']}\n\nAfirmaciones disponibles:\n"
-            + "\n".join(f"- {a['id']}" + (f" ({i['general_pedido']})" if a["estado"] == "general" else "")
-                        + f": {a['texto']}" for a in afirm))
+            + _lista_afirmaciones(afirm, idioma))
+
+
+# ---------------------------------------------------------------------------
+# preguntas de práctica después de cada video
+# ---------------------------------------------------------------------------
+
+PREGUNTAS = (2, 3)          # cuántas preguntas por tema
+OPCIONES = (3, 4)           # cuántas opciones por pregunta
+MARCA_GENERAL = ("método general", "general method")   # lo que dice la explicación si usa un método general
+
+
+def pedido_preguntas(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str, destino: Path,
+                     modo: str = "proyecto", idioma: str = "es") -> str:
+    """El pedido de las preguntas de un tema: el tema y SOLO sus afirmaciones verificadas, como el del guion."""
+    tema = next(t for t in temas if t["id"] == tema_id)
+    return (f"IDIOMA DEL VIDEO: {idioma}\n"
+            f"Tema: {tema['titulo']}\n{IDIOMAS[idioma][modo]['pregunta']}: {tema['pregunta']}\n"
+            f"Escribí {destino} siguiendo prompts/preguntas.md: {PREGUNTAS[0]} o {PREGUNTAS[1]} preguntas de "
+            f"{OPCIONES[0]} o {OPCIONES[1]} opciones, solo con estas afirmaciones.\n\nAfirmaciones disponibles:\n"
+            + _lista_afirmaciones(_afirmaciones_del_tema(inv, tema), idioma))
+
+
+def _texto(x: Any) -> bool:
+    return isinstance(x, str) and bool(x.strip())
+
+
+def validar_preguntas(datos: Any, inv: dict[str, Any], tema: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Comprueba T/tNN/preguntas.json. Devuelve (errores, avisos), como compile.compilar.
+
+    Errores: la forma (2–3 preguntas, 3–4 opciones distintas, «correcta» dentro de rango) y las fuentes
+    (tienen que ser afirmaciones de ESTE tema; las que quedaron para comprobar van a la persona).
+    Avisos: identificadores o números de 2+ cifras de la opción correcta o de la explicación que no
+    están en las afirmaciones citadas (texto y cita), con el mismo criterio que el guion."""
+    from fuentes import identificadores
+    if not isinstance(datos, dict) or not isinstance(datos.get("preguntas"), list):
+        return ['tiene que ser {"preguntas": [{"id", "texto", "opciones", "correcta", "explicacion", "fuentes"}, …]}'], []
+    preguntas = datos["preguntas"]
+    errores: list[str] = []
+    avisos: list[str] = []
+    if not PREGUNTAS[0] <= len(preguntas) <= PREGUNTAS[1]:
+        errores.append(f"hay {len(preguntas)} preguntas: tienen que ser {PREGUNTAS[0]} o {PREGUNTAS[1]}")
+    afirm = {a["id"]: a for a in inv["afirmaciones"]}
+    del_tema = set(tema["afirmaciones"])
+    ids: list[Any] = []
+    for n, p in enumerate(preguntas, 1):
+        if not isinstance(p, dict):
+            errores.append(f"pregunta {n}: tiene que ser un objeto")
+            continue
+        donde = f"pregunta {p.get('id') or n}"
+        ids.append(p.get("id"))
+        if not _texto(p.get("id")):
+            errores.append(f"{donde}: falta «id» (q1, q2, q3)")
+        for clave in ("texto", "explicacion"):
+            if not _texto(p.get(clave)):
+                errores.append(f"{donde}: falta «{clave}»")
+        opciones = p.get("opciones")
+        if not isinstance(opciones, list) or not all(_texto(o) for o in opciones):
+            errores.append(f"{donde}: «opciones» tiene que ser una lista de textos")
+            opciones = None
+        else:
+            if not OPCIONES[0] <= len(opciones) <= OPCIONES[1]:
+                errores.append(f"{donde}: tiene {len(opciones)} opciones; tienen que ser {OPCIONES[0]} o {OPCIONES[1]}")
+            vistas = [" ".join(o.split()).casefold() for o in opciones]
+            repetidas = sorted({o for o in vistas if vistas.count(o) > 1})
+            if repetidas:
+                errores.append(f"{donde}: opciones repetidas: {', '.join(repetidas)}")
+        correcta = p.get("correcta")
+        bien_correcta = (isinstance(correcta, int) and not isinstance(correcta, bool) and opciones is not None
+                         and 0 <= correcta < len(opciones))
+        if not bien_correcta:
+            rango = f" (de 0 a {len(opciones) - 1})" if opciones else ""
+            errores.append(f"{donde}: «correcta» tiene que ser la posición de la opción correcta{rango}, no {correcta!r}")
+        fuentes = p.get("fuentes")
+        if not isinstance(fuentes, list) or not fuentes:
+            errores.append(f"{donde}: sin fuentes (los ids de las afirmaciones que la respaldan)")
+            continue
+        respaldo, general = "", False
+        for f in fuentes:
+            a = afirm.get(f)
+            if a is None:
+                errores.append(f"{donde}: la fuente «{f}» no está en el inventario")
+            elif f not in del_tema:
+                errores.append(f"{donde}: la fuente «{f}» es de otro tema; usá solo las afirmaciones del pedido")
+            elif a.get("estado") not in ("ok", "general"):
+                errores.append(f"{donde}: {f} está para comprobar: {'; '.join(a.get('motivos', [])) or 'sin verificar'}")
+            else:
+                respaldo += " " + a["texto"] + " " + a.get("cita", "")
+                general = general or a.get("estado") == "general"
+        if general and _texto(p.get("explicacion")) and not any(m in p["explicacion"].casefold() for m in MARCA_GENERAL):
+            errores.append(f"{donde}: usa un método general y la explicación no lo dice "
+                           "(«Método general, no está en tu material: …» / «General method, not from your material: …»)")
+        if respaldo and bien_correcta:
+            visible = f"{opciones[correcta]} {p.get('explicacion') or ''}"
+            sueltos = sorted(i for i in identificadores(visible) if i.lower() not in respaldo.lower())
+            if sueltos:
+                avisos.append(f"{donde}: no aparecen en sus fuentes (¿inventados?): {', '.join(sueltos)}")
+    validos = [i for i in ids if _texto(i)]
+    if len(validos) != len(set(validos)):
+        errores.append("hay ids de pregunta repetidos")
+    return errores, avisos
 
 
 # El código comprueba que la cita esté en la fuente, pero no que la afirmación se siga de ella: una
