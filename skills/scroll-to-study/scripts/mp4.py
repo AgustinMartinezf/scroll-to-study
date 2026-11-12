@@ -4,12 +4,15 @@
     python3 mp4.py VIDEO.html SALIDA.mp4 [--fps 30] [--alto 1280]
 
 Abre el video en Chromium, pinta cada cuadro con el reloj del propio reproductor (__s2s.pintar) y le pasa
-las capturas a ffmpeg junto con el MP3 que lleva adentro el .html. Playwright y ffmpeg son opcionales: el
+las capturas a ffmpeg junto con el MP3 que lleva adentro el .html. Captura directo al tamaño de salida (el
+reproductor escala la escena a la ventana) y con varias pestañas a la vez, cada una con un cuadro distinto:
+capturar es lo que más tarda. Playwright y ffmpeg son opcionales: el
 resto del skill no los necesita, y `faltantes()` dice cómo instalar lo que falte.
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import importlib.util
 import re
@@ -24,7 +27,7 @@ sys.path.insert(0, str(AQUI))
 
 import config  # noqa: E402,F401  (salida en UTF-8 en Windows)
 
-ANCHO_PAGINA, ALTO_PAGINA = 1080, 1920
+PESTANAS = 4          # capturas en paralelo: 4 bajan el tiempo por cuadro a la mitad; más casi no suma
 
 
 def _python() -> str:
@@ -74,7 +77,6 @@ def faltantes() -> list[tuple[str, str]]:
 def exportar(video: Path, salida: Path, fps: int = 30, alto: int = 1280) -> int:
     """Escribe salida (.mp4) y devuelve cuántos cuadros tiene. Escribe a un archivo aparte y lo renombra al
     terminar: un .mp4 a medias nunca queda con el nombre final (ni cuenta como «al día»)."""
-    from playwright.sync_api import sync_playwright
     exe = ffmpeg()
     if not exe:
         raise SystemExit("falta ffmpeg: " + como_instalar_ffmpeg())
@@ -92,22 +94,11 @@ def exportar(video: Path, salida: Path, fps: int = 30, alto: int = 1280) -> int:
         audio.write_bytes(base64.b64decode(m[1]))
         ff = subprocess.Popen([exe, "-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", str(fps),
                                "-c:v", "mjpeg", "-i", "-", "-i", str(audio),
-                               "-vf", f"scale={ancho}:{alto}:flags=lanczos", "-c:v", "libx264", "-preset", "slow",
+                               "-vf", f"scale={ancho}:{alto}:flags=lanczos", "-c:v", "libx264", "-preset", "medium",
                                "-crf", "26", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
                                "-shortest", "-movflags", "+faststart", str(parcial)], stdin=subprocess.PIPE)
         try:
-            with sync_playwright() as pw:
-                nav = pw.chromium.launch()
-                p = nav.new_page(viewport={"width": ANCHO_PAGINA, "height": ALTO_PAGINA})
-                p.goto(Path(video).resolve().as_uri())
-                p.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=20000)
-                p.evaluate("document.getElementById('s2s-tapa').hidden = true;"
-                           "document.getElementById('s2s-barra').style.display = 'none'")
-                n = int(p.evaluate("__s2s.D") * fps)
-                for i in range(n):
-                    p.evaluate("t => __s2s.pintar(t)", i / fps)
-                    ff.stdin.write(p.screenshot(type="jpeg", quality=92))
-                nav.close()
+            n = asyncio.run(_capturar(Path(video), ancho, alto, fps, ff.stdin.write))
             ff.stdin.close()
             if ff.wait() != 0:
                 raise SystemExit(f"ffmpeg falló al exportar {video}")
@@ -119,6 +110,35 @@ def exportar(video: Path, salida: Path, fps: int = 30, alto: int = 1280) -> int:
             raise
     parcial.replace(salida)
     return n
+
+
+async def _capturar(video: Path, ancho: int, alto: int, fps: int, escribir) -> int:
+    """Pinta y captura todos los cuadros, de a PESTANAS a la vez, y se los pasa a escribir en orden."""
+    from playwright.async_api import async_playwright
+    async with async_playwright() as pw:
+        nav = await pw.chromium.launch()
+        try:
+            pestanas = []
+            for _ in range(PESTANAS):
+                p = await nav.new_page(viewport={"width": ancho, "height": alto})
+                await p.goto(video.resolve().as_uri())
+                await p.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=20000)
+                await p.evaluate("document.getElementById('s2s-tapa').hidden = true;"
+                                 "document.getElementById('s2s-barra').style.display = 'none'")
+                pestanas.append(p)
+            n = int(await pestanas[0].evaluate("__s2s.D") * fps)
+
+            async def cuadro(p, i: int) -> bytes:
+                await p.evaluate("t => __s2s.pintar(t)", i / fps)
+                return await p.screenshot(type="jpeg", quality=92)
+
+            for inicio in range(0, n, PESTANAS):
+                tanda = range(inicio, min(n, inicio + PESTANAS))
+                for imagen in await asyncio.gather(*(cuadro(p, i) for p, i in zip(pestanas, tanda))):
+                    escribir(imagen)
+            return n
+        finally:
+            await nav.close()
 
 
 def main(argv: list[str] | None = None) -> int:

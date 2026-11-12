@@ -162,9 +162,8 @@ It skips the MP4s that are newer than their video, so after redoing a video run 
 Playwright with its Chromium and ffmpeg; if they are missing it prints how to install them and stops
 without touching anything: show those commands to the person and run them only if they agree. The
 MP4s go to the phone like any file (cable, AirDrop, or sending them to themselves on WhatsApp) and
-play offline in Photos or WhatsApp. It is slow: about 7 to 8 times the length of each video (a
-one-minute video takes around 7 minutes), so tell the person before exporting many, and run it in the
-background.
+play offline in Photos or WhatsApp. Each video takes a little longer than it lasts (a one-minute
+video, about a minute and a quarter), so with many videos run it in the background.
 
 ## What you do not do
 - Do not write spec.json, script.json, gaps.json or timing.json by hand: the scripts generate them.
