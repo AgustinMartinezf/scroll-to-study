@@ -18,7 +18,9 @@ from datos import EJEMPLO
 from etapas import escribir_salidas
 from voz_falsa import generar
 
-VERSIONES = {"numpy": "2.1.0", "soundfile": "0.12.1", "piper-tts": "1.3.0", "onnx": "1.16.0", "pypdf": "4.3.1"}
+# cada paquete de requirements.txt instalado justo en su versión mínima (sigue a requirements.txt si cambia)
+VERSIONES = {paquete: minimo or "1.0" for paquete, minimo in diagnostico.requisitos()}
+VERSIONES["pypdf"] = "4.3.1"
 
 
 @pytest.fixture
