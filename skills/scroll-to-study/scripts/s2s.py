@@ -5,7 +5,7 @@ Claude escribe los JSON (inventario, temas, guiones); este script comprueba todo
 comprobar con código y fabrica los videos:
 
   python3 s2s.py instalar                       # una vez: voz (Piper) y gsap a la carpeta de datos
-  python3 s2s.py corpus    -t T [--modo proyecto|materia] --repo RUTA|repo.zip [--doc apunte.pdf ...]
+  python3 s2s.py corpus    -t T [--modo proyecto|materia] --repo RUTA|repo.zip [--doc apunte.pdf|clase.pptx|notas.docx ...]
   python3 s2s.py verificar -t T                 # verifica T/inventario.json contra el material
   python3 s2s.py respaldo  -t T                 # pide y aplica el juicio: ¿la cita respalda la afirmación?
   python3 s2s.py temas     -t T                 # filtra T/temas.json (solo afirmaciones verificadas)
@@ -170,9 +170,13 @@ def cmd_corpus(a: argparse.Namespace) -> int:
     escribir(t / "origen.json", origen)
     (t / "corpus.txt").write_text(texto, encoding="utf-8")
     print(f"{len(c.archivos)} archivos, {sum(len(p) for p in c.paginas.values())} páginas de PDF, "
+          f"{sum(len(d) for d in c.diapositivas.values())} diapositivas, "
           f"{len(texto)} caracteres → {t / 'corpus.txt'}")
     if c.omitidos:
         print("omitidos (binarios o > 200 KB):", ", ".join(c.omitidos[:20]))
+    for pdf, (vacias, total) in c.pdf_escaneados().items():
+        print(f"AVISO  {pdf}: {vacias} de {total} páginas no tienen texto (¿PDF escaneado?). "
+              "Hace falta un PDF con texto: pasale OCR antes (por ejemplo, ocrmypdf) o conseguí la versión digital")
     if len(texto) > 600_000:
         print("AVISO  material muy grande: pedí solo las carpetas o los capítulos que importan")
     print(f"modo {a.modo}: seguí prompts/{a.modo}/inventario.md")

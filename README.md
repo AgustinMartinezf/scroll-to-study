@@ -62,8 +62,8 @@ You need [Claude Code](https://code.claude.com) and Python 3.10 or newer. In Cla
 `/plugin marketplace update scroll-to-study`.
 
 The first time you use it, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`,
-`onnx`, `pypdf`) and downloads the voice for your language (~65 MB), gsap and KaTeX to
-`~/.scroll-to-study` (`S2S_DATOS` changes the folder). That folder stays when the plugin updates.
+`onnx`, `pypdf`, `python-pptx`, `python-docx`) and downloads the voice for your language (~65 MB),
+gsap and KaTeX to `~/.scroll-to-study` (`S2S_DATOS` changes the folder). That folder stays when the plugin updates.
 
 ## Use
 
@@ -104,7 +104,13 @@ which you can send to your phone and watch offline in Photos or WhatsApp. It is 
   commercial use. The Spanish voice (`davefx`) has its own terms (see [THIRD_PARTY.md](THIRD_PARTY.md)).
 - Formulas are quoted by the text around them: PDF text extraction usually breaks formulas, so the
   formula itself cannot be checked letter by letter against the material.
-- Diagrams that are only images in slides cannot be quoted, so they do not make it into the videos.
+- The material can be PDFs with text, slides (`.pptx`), Word documents (`.docx`) and text or code
+  files. Old `.ppt`/`.doc` files and Google Slides/Docs links are not read: export them first.
+- Scanned PDFs have no text to quote. `corpus` warns when more than half of a PDF's pages are empty;
+  run it through OCR (for example `ocrmypdf`) or use the digital version. There is no built-in OCR.
+- Diagrams that are only images in slides or documents cannot be quoted, so they do not make it into
+  the videos. Text inside charts and SmartArt in `.pptx`, and headers, footers and footnotes in
+  `.docx`, are not read either.
 - "The script only sees its statements" is an instruction to Claude, who has already read the whole
   material; the validator backs it up by flagging names and numbers that are not in the sources.
 - Code checks that the quote is in the material and that the statement's names and numbers appear in
@@ -116,7 +122,7 @@ which you can send to your phone and watch offline in Photos or WhatsApp. It is 
 ## Development
 
 ```
-python -m pip install numpy soundfile pypdf pytest
+python -m pip install numpy soundfile pypdf python-pptx python-docx pytest
 python -m pytest -q tests
 ```
 

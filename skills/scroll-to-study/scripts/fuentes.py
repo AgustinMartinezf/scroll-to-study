@@ -1,6 +1,6 @@
 """Material de estudio -> corpus numerado, y verificación mecánica de afirmaciones.
 
-Cada afirmación del inventario trae su fuente ("sql/schema.sql:12-18" o "informe.pdf:p4")
+Cada afirmación del inventario trae su fuente ("sql/schema.sql:12-18", "informe.pdf:p4" o "clase.pptx:d4")
 y una cita textual. Acá se comprueba, sin LLM, que:
   1. la fuente existe y el rango no es enorme,
   2. la cita aparece en ese lugar (si aparece en otro, se dice dónde),
@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import formatos
+
 EXT_TEXTO = {".sql", ".java", ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".md", ".txt",
              ".json", ".yml", ".yaml", ".xml", ".c", ".h", ".cpp", ".cs", ".go", ".rb", ".php",
              ".kt", ".swift", ".sh", ".properties", ".gradle"}
@@ -23,6 +25,7 @@ IGNORAR = {".git", "node_modules", "dist", "build", "target", "__pycache__", ".v
            ".idea", ".vscode", ".gradle", "out"}
 MAX_BYTES = 200_000
 MAX_LINEAS_CITA = 40
+MAX_PAGINAS_CITA = 2      # páginas de PDF o diapositivas
 # sinónimos habituales: la afirmación dice "FK", el SQL dice "FOREIGN KEY"
 EQUIV = {"fk": "foreign key", "pk": "primary key"}
 
@@ -31,6 +34,7 @@ EQUIV = {"fk": "foreign key", "pk": "primary key"}
 class Corpus:
     archivos: dict[str, list[str]] = field(default_factory=dict)   # ruta -> líneas
     paginas: dict[str, list[str]] = field(default_factory=dict)    # pdf -> texto por página
+    diapositivas: dict[str, list[str]] = field(default_factory=dict)  # pptx -> texto por diapositiva
     omitidos: list[str] = field(default_factory=list)
 
     def texto_para_llm(self) -> str:
@@ -42,22 +46,38 @@ class Corpus:
             for i, t in enumerate(pags, 1):
                 partes.append(f"=== {pdf} p{i} ===")
                 partes.append(t)
+        for pptx, diaps in self.diapositivas.items():
+            for i, t in enumerate(diaps, 1):
+                partes.append(f"=== {pptx} d{i} ===")
+                partes.append(t)
         return "\n".join(partes)
+
+    def pdf_escaneados(self) -> dict[str, tuple[int, int]]:
+        """PDF con más de la mitad de las páginas sin texto: pdf -> (vacías, total)."""
+        vacias = {pdf: (sum(not t.strip() for t in pags), len(pags)) for pdf, pags in self.paginas.items()}
+        return {pdf: (v, n) for pdf, (v, n) in vacias.items() if v * 2 > n}
 
     def fragmento(self, ref: str) -> tuple[str | None, str | None]:
         """Devuelve (texto, error) para una referencia."""
-        m = re.fullmatch(r"(.+):p(\d+)(?:-(\d+))?", ref)
-        if m and m.group(1) in self.paginas:
-            pags = self.paginas[m.group(1)]
-            a, b = int(m.group(2)), int(m.group(3) or m.group(2))
+        m = re.fullmatch(r"(.+):([pd])(\d+)(?:-(\d+))?", ref)
+        partes = {"p": (self.paginas, "páginas"), "d": (self.diapositivas, "diapositivas")}
+        if m and m.group(1) in partes[m.group(2)][0]:
+            dicc, nombre = partes[m.group(2)]
+            pags = dicc[m.group(1)]
+            a, b = int(m.group(3)), int(m.group(4) or m.group(3))
             if not 1 <= a <= b <= len(pags):
-                return None, f"{m.group(1)} tiene {len(pags)} páginas"
-            if b - a > 1:
-                return None, "rango de páginas demasiado amplio (máximo 2)"
+                return None, f"{m.group(1)} tiene {len(pags)} {nombre}"
+            if b - a + 1 > MAX_PAGINAS_CITA:
+                return None, f"rango de {nombre} demasiado amplio (máximo {MAX_PAGINAS_CITA})"
             return "\n".join(pags[a - 1:b]), None
+        if m and m.group(1) not in self.archivos:
+            for letra, (dicc, nombre) in partes.items():
+                if m.group(1) in dicc:
+                    return None, f"«{m.group(1)}» se cita por {nombre}: usá {m.group(1)}:{letra}N"
+            return None, f"no existe el archivo «{m.group(1)}»"
         m = re.fullmatch(r"(.+):(\d+)(?:-(\d+))?", ref)
         if not m:
-            return None, f"referencia mal formada «{ref}» (usá ruta:12-18 o archivo.pdf:p4)"
+            return None, f"referencia mal formada «{ref}» (usá ruta:12-18, archivo.pdf:p4 o archivo.pptx:d4)"
         ruta, a, b = m.group(1), int(m.group(2)), int(m.group(3) or m.group(2))
         if ruta not in self.archivos:
             return None, f"no existe el archivo «{ruta}»"
@@ -80,6 +100,8 @@ class Corpus:
                     lugares.append(f"{ruta}:{i + 1}" + (f"-{fin}" if fin > i + 1 else ""))
         for pdf, pags in self.paginas.items():
             lugares += [f"{pdf}:p{i}" for i, t in enumerate(pags, 1) if cita_norm in _norm(t)]
+        for pptx, diaps in self.diapositivas.items():
+            lugares += [f"{pptx}:d{i}" for i, t in enumerate(diaps, 1) if cita_norm in _norm(t)]
         return lugares[:3]
 
 
@@ -113,6 +135,10 @@ def cargar(repo: Path | None, docs: list[Path]) -> Corpus:
     for d in docs:
         if d.suffix.lower() == ".pdf":
             c.paginas[d.name] = _paginas_pdf(d)
+        elif d.suffix.lower() == ".pptx":
+            c.diapositivas[d.name] = formatos.diapositivas_pptx(d)
+        elif d.suffix.lower() == ".docx":
+            c.archivos[d.name] = formatos.lineas_docx(d)
         else:
             c.archivos[d.name] = d.read_text(encoding="utf-8", errors="replace").splitlines()
     return c

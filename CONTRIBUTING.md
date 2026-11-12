@@ -6,7 +6,7 @@ through a pull request and has to pass the tests on Linux, Windows and macOS.
 ## Before you open a pull request
 
 ```
-python -m pip install numpy soundfile pypdf pytest
+python -m pip install numpy soundfile pypdf python-pptx python-docx pytest
 python -X warn_default_encoding -W error::EncodingWarning -m pytest -q tests
 ```
 
