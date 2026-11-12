@@ -14,6 +14,8 @@ comprobar con código y fabrica los videos:
   python3 s2s.py video     -t T --tema t01      # voz + animación -> T/videos/t01.html
   python3 s2s.py videos    -t T [--titulo ...]  # todos los guiones listos + T/videos/index.html
   python3 s2s.py estado    -t T
+  python3 s2s.py mp4       -t T [--tema t01] [--alto 1280]   # opcional: T/videos/*.html -> T/mp4/*.mp4
+  python3 s2s.py diagnostico                    # qué está instalado y qué falta, una línea por cosa
 
 Cada llamada queda en T/registro.jsonl (cuántos intentos y cuánto tiempo lleva cada etapa).
 """
@@ -388,10 +390,59 @@ def cmd_estado(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mp4(a: argparse.Namespace) -> int:
+    """Exporta los videos a MP4 (para Fotos o WhatsApp: la vista previa de iOS no ejecuta el .html)."""
+    import mp4
+    t = a.trabajo
+    carpeta = t / "videos"
+    if a.tema:
+        videos = [carpeta / f"{a.tema}.html"]
+        if not videos[0].exists():
+            print(f"no existe {videos[0]}: primero s2s.py video -t {t} --tema {a.tema}")
+            return 1
+    else:
+        videos = sorted(p for p in carpeta.glob("*.html") if p.name != "index.html")
+        if not videos:
+            print(f"no hay videos en {carpeta}: primero s2s.py videos -t {t}")
+            return 1
+    pendientes = []
+    for v in videos:
+        destino = t / "mp4" / f"{v.stem}.mp4"
+        if a.todo or not destino.exists() or destino.stat().st_mtime < v.stat().st_mtime:
+            pendientes.append((v, destino))
+        else:
+            print(f"  {v.stem}: al día")
+    if not pendientes:
+        print(f"todos los MP4 están al día en {t / 'mp4'}")
+        registrar(t, "mp4", hechos=0, al_dia=len(videos), alto=a.alto)
+        return 0
+    falta = mp4.faltantes()
+    if falta:
+        print("Para exportar a MP4 hace falta instalar (es opcional: los videos .html andan sin esto):")
+        for nombre, arreglo in falta:
+            print(f"  {nombre}: {arreglo}")
+        print("Después corré de nuevo: s2s.py mp4 -t " + str(t))
+        registrar(t, "mp4", error="faltan dependencias", faltan=[n for n, _ in falta])
+        return 1
+    inicio = time.time()
+    for v, destino in pendientes:
+        mp4.exportar(v, destino, alto=a.alto)
+        print(f"  {v.stem}: {destino} ({destino.stat().st_size // 1024} KB)")
+    print(f"{len(pendientes)} MP4 → {t / 'mp4'} (pasalos al teléfono: se ven en Fotos o por WhatsApp, sin internet)")
+    registrar(t, "mp4", hechos=len(pendientes), al_dia=len(videos) - len(pendientes), alto=a.alto,
+              segundos=round(time.time() - inicio, 1))
+    return 0
+
+
+def cmd_diagnostico(a: argparse.Namespace) -> int:
+    import diagnostico
+    return diagnostico.imprimir(diagnostico.revisar())
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion",
-                                      "video", "videos", "estado"])
+                                      "video", "videos", "estado", "mp4", "diagnostico"])
     ap.add_argument("-t", "--trabajo", type=Path)
     ap.add_argument("--repo", type=Path)
     ap.add_argument("--doc", type=Path, action="append", default=[])
@@ -403,14 +454,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--idioma", choices=sorted(IDIOMAS), default="es", help="corpus: idioma de los videos")
     ap.add_argument("--modo", choices=sorted(MODOS), default="proyecto",
                     help="corpus: proyecto (lo hiciste vos) o materia (estudiás para un examen)")
-    ap.add_argument("--todo", action="store_true", help="videos: rehacer aunque ya existan")
+    ap.add_argument("--todo", action="store_true", help="videos, mp4: rehacer aunque ya existan")
+    ap.add_argument("--alto", type=int, default=1280, help="mp4: alto en píxeles (el ancho sale de 9:16)")
     a = ap.parse_args(argv)
-    if a.etapa != "instalar" and not a.trabajo:
+    if a.etapa not in ("instalar", "diagnostico") and not a.trabajo:
         ap.error("pasá -t CARPETA_DE_TRABAJO")
     if a.etapa == "corpus" and not a.repo and not a.doc:
         ap.error("pasá --repo y/o --doc")
     if a.etapa in ("pedido", "guion", "video") and not a.tema:
         ap.error("pasá --tema")
+    if a.etapa == "mp4" and not 160 <= a.alto <= 3840:
+        ap.error("--alto va de 160 a 3840")
     return globals()[f"cmd_{a.etapa}"](a)
 
 
