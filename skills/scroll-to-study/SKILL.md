@@ -76,7 +76,28 @@ If the material contradicts itself (for example, a slide's text says the opposit
 not pick a version: leave that statement out and tell the person what you saw and where, so they can
 check it with their teacher.
 
-## 3. Topics (the person decides)
+## 3. Does the quote back the statement?
+
+The check in step 2 is mechanical: it confirms the quote is in the source and that the names and
+numbers of the statement appear in it, but not that the statement actually follows from the quote. A
+real quote can back a false statement ("WPA2 usa AES" does not prove "WPA2 usa 3 rondas de AES"). So:
+
+    S2S respaldo -t T
+
+With no `T/respaldo.json` yet, it writes `T/respaldo_pedido.txt` with the statements still in "ok" and
+their quotes. Read ONLY that file — do not look at the material again — and for each one decide whether
+the quote supports exactly what the statement claims. Write `T/respaldo.json` as
+`{"<id>": {"respalda": true|false, "motivo": "<short reason>"}}`, one entry per id and no others. Set
+`respalda` to false when the statement adds, contradicts or does not follow from the quote, and give
+the `motivo` in those cases. Then run `S2S respaldo -t T` again to apply it: the statements with
+`respalda` false move to "comprobar" with that reason.
+
+Then handle them like the rest of "comprobar". In project mode, show them to the person and only keep
+the ones they confirm (`"aprobado": true` leaves a statement in "ok" and is respected here too). In
+course mode nothing is approved by hand, so a statement whose quote does not back it does not reach any
+video.
+
+## 4. Topics (the person decides)
 
 Follow `prompts/<modo>/temas.md` with the verified inventory, write `T/temas.json`
 (`{"temas": [{"id","titulo","pregunta","afirmaciones"}]}`) and run `S2S temas -t T`.
@@ -88,7 +109,7 @@ Each video gets a format picked from its statements (pregunta: question and answ
 mito: myth vs fact; avsb: A versus B; pasos: step by step; historia: problem → decision). If the
 person wants a specific format for a topic, add `"formato": "<name>"` to that topic.
 
-## 4. Scripts, one per topic
+## 5. Scripts, one per topic
 
 For each topic, in order:
 
@@ -107,7 +128,7 @@ If there are many topics, do 3 or 4 at a time and ask whether to continue. When 
 `PREGUNTAR` and `[COMPROBAR]` notes and resolve them with the person: they know whether the fact is
 true. With their answer, fix the script (or the sources) and validate again.
 
-## 5. Videos
+## 6. Videos
 
     S2S videos -t T --titulo "<name of the project or course>"
 
