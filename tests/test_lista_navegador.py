@@ -152,6 +152,31 @@ def test_en_escritorio_no_hay_capa(navegador, lista):
     assert not page.evaluate("document.getElementById('capa').classList.contains('activa')")
 
 
+def test_si_el_video_se_recarga_solo_retoma_desde_el_ultimo_tiempo_y_anota_el_corte(navegador, lista):
+    finge = "Object.defineProperty(navigator, 'clipboard', { value: { writeText: async t => { window.copiado = t; } } });"
+    page = abrir(navegador, lista, init=finge)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0 } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 12.5 } }, '*')")
+    f.evaluate("location.reload()")                                   # como cuando iOS mata el proceso del iframe
+    f.wait_for_function("window.recibidos && window.recibidos.some(m => m && m.s2s === 'play' && m.desde === 12.5)")
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")
+    cortes = json.loads(page.evaluate("localStorage.getItem('s2s-cortes:' + document.title)"))
+    assert len(cortes) == 1
+    c = cortes[0]
+    assert c["video"] == "t01" and c["t"] == 12.5 and c["fecha"].startswith("2026-11-12") and "Mozilla" in c["ua"]
+    assert guardado(page)["dias"] == {}                                # el registro va aparte del progreso
+    # volver a abrirlo desde la lista no es un corte: arranca desde 0
+    page.click("#lista li:nth-child(1) button")
+    f = video(page, "t01.html")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'play')")
+    assert f.evaluate("window.recibidos.filter(m => m && m.s2s === 'play').map(m => m.desde)") == [None]
+    assert len(json.loads(page.evaluate("localStorage.getItem('s2s-cortes:' + document.title)"))) == 1
+    page.click("#exp")
+    page.wait_for_function("window.copiado !== undefined")
+    assert json.loads(page.evaluate("window.copiado"))["cortes"] == cortes
+
+
 def test_exportar_copia_al_portapapeles(navegador, lista):
     finge = "Object.defineProperty(navigator, 'clipboard', { value: { writeText: async t => { window.copiado = t; } } });"
     page = abrir(navegador, lista, {"v": 2, "cur": "t01", "dias": {"2026-11-12": ["t01"], "2026-11-11": ["t02"]}}, init=finge)
@@ -160,7 +185,7 @@ def test_exportar_copia_al_portapapeles(navegador, lista):
     page.wait_for_function("window.copiado !== undefined")
     x = json.loads(page.evaluate("window.copiado"))
     assert x["titulo"] == "Piloto" and x["racha"] == 2 and x["generado"].startswith("2026-11-12")
-    assert x["dias"] == {"2026-11-11": ["t02"], "2026-11-12": ["t01"]}
+    assert x["dias"] == {"2026-11-11": ["t02"], "2026-11-12": ["t01"]} and x["cortes"] == []
     assert texto(page, "#aviso") == "Copiado al portapapeles"
     assert page.query_selector("#expTxt") is None
 

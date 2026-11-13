@@ -194,7 +194,7 @@ the animation follows the audio, that nothing important falls outside the TikTok
 zones, and that the picture never stays still for more than a second (needs `playwright`).
 
 The phone app is in `web/`. `tools/sitio.py` builds the published site into `_site/` (it adds
-`progreso.js` and `cuestionario.js`, which only live in `skills/scroll-to-study/scripts/`, and versions
+`progreso.js`, `cuestionario.js` and `reproduccion.js`, which only live in `skills/scroll-to-study/scripts/`, and versions
 the service worker's cache); serve it with `python -m http.server -d _site 8000` to try it. `.github/workflows/pages.yml`
 publishes it to GitHub Pages on every push to `main` that touches it. Its tests
 (`tests/test_app_web.py`, and `tests/test_lista_navegador.py` for the playlist) need `playwright` with
@@ -215,6 +215,7 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 | `mp4.py` | Optional: exports a video `.html` to `.mp4` with Playwright and ffmpeg |
 | `paquete.py` | Puts every video in one `.s2s.json` for the phone app |
 | `progreso.js` + `cuestionario.js` | Progress and review (pure functions) and the questions after each video; shared by the playlist and the phone app |
+| `reproduccion.js` | What the playlist and the phone app say to the video's iframe: resuming a video whose iframe reloaded by itself, and the log of those cuts |
 | `diagnostico.py` | Checks Python, the packages, the voices, gsap and KaTeX, and says how to fix what is missing |
 
 ## License

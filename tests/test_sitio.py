@@ -12,10 +12,12 @@ import sitio  # noqa: E402
 
 
 def test_progreso_y_cuestionario_tienen_una_sola_fuente_y_se_copian_al_armar(tmp_path):
-    assert not (RAIZ / "web" / "progreso.js").exists() and not (RAIZ / "web" / "cuestionario.js").exists()
+    for js in sitio.COMPARTIDOS:
+        assert not (RAIZ / "web" / js.name).exists(), js.name
     d = sitio.armar(tmp_path / "_site")
     assert (d / "progreso.js").read_bytes() == sitio.PROGRESO.read_bytes()
     assert (d / "cuestionario.js").read_bytes() == sitio.CUESTIONARIO.read_bytes()
+    assert (d / "reproduccion.js").read_bytes() == sitio.REPRODUCCION.read_bytes()
     for nombre in ("index.html", "app.js", "paquete.js", "sw.js", "manifest.webmanifest",
                    "iconos/icono-192.png", "iconos/icono-512.png", "iconos/apple-touch-icon.png"):
         assert (d / nombre).is_file(), nombre
@@ -28,7 +30,8 @@ def test_el_service_worker_cachea_todo_con_una_version_por_contenido(tmp_path, m
     version = re.search(r'const VERSION = "([0-9a-f]{12})";', sw)[1]
     lista = json.loads(re.search(r"const ARCHIVOS = (\[.*?\]);", sw)[1])
     esperados = sorted(p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file() and p.name != "sw.js")
-    assert lista == ["./"] + esperados and "progreso.js" in lista and "cuestionario.js" in lista and "index.html" in lista
+    assert lista == ["./"] + esperados and "progreso.js" in lista and "cuestionario.js" in lista and "reproduccion.js" in lista
+    assert "index.html" in lista
     # armar dos veces lo mismo da la misma versión; cambiar un archivo da otra (y otra caché)
     assert sitio.armar(tmp_path / "b").joinpath("sw.js").read_text(encoding="utf-8") == sw
     web = tmp_path / "web"

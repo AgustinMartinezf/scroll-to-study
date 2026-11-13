@@ -7,6 +7,8 @@
  *   de la compu (cada navegador tiene el suyo).
  * - Después de cada video, si el tema trae preguntas (paquete v2), se muestran encima del reproductor con
  *   cuestionario.js, igual que en la lista de la compu, y el resultado decide cuándo vuelve el tema.
+ * - Lo que pasa con el iframe del video (los avisos, retomarlo si se recarga solo y el registro de cortes)
+ *   está en reproduccion.js, compartido con la lista de la compu.
  * - Cada video corre en un iframe sandbox (sin allow-same-origin) desde una URL blob: no puede leer los
  *   otros paquetes ni el progreso. Habla con la lista por postMessage, como en videos/index.html.
  */
@@ -329,8 +331,13 @@
 
   // capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
   const tactil = (window.matchMedia && matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0;
-  let arrancar = false, sonando = false, ini = null, urlActual = null, turno = 0, quiz = null;
-  const ponerCapa = () => capa.classList.toggle("activa", tactil && sonando);
+  let ini = null, urlActual = null, turno = 0, quiz = null;
+  // lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
+  const R = window.Reproduccion.conectar({
+    iframe: v, claveCortes: () => "s2s-cortes:" + actual.titulo, activo: () => !!actual,
+    alCambiar: () => ponerCapa(), alFin: () => terminoVideo(),
+  });
+  const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 
   function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
   function seguirConLoQueToca() {
@@ -355,7 +362,7 @@
   function detenerVideo() {
     turno++;
     cerrarQuiz();
-    sonando = false; ponerCapa();
+    R.detener();
     v.removeAttribute("src");
     if (urlActual) { URL.revokeObjectURL(urlActual); urlActual = null; }
   }
@@ -364,13 +371,14 @@
     if (!actual || i < 0 || i >= VIDEOS.length) return;
     cerrarQuiz();
     st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
-    arrancar = auto; sonando = false; ponerCapa(); pintar();
+    R.detener(); pintar();
     const mio = ++turno, titulo = actual.titulo;
     let html = null;
     try { html = await leerVideo(titulo, VIDEOS[i].id); } catch (e) {}
     if (mio !== turno) return;                     // mientras tanto se pidió otro video
     if (typeof html !== "string") { error(TX.errVideo); return; }
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    R.cargar(VIDEOS[i].id, auto);
     v.src = url;
     if (urlActual) URL.revokeObjectURL(urlActual);  // la anterior ya no la usa nadie
     urlActual = url;
@@ -387,20 +395,15 @@
     if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
     else if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && v.contentWindow) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
   });
-  // el video avisa con postMessage cuándo está listo, cuándo suena, se pausa y termina. Solo se le cree
-  // al iframe del reproductor (el origen es opaco por el sandbox, así que se compara la ventana).
-  addEventListener("message", e => {
-    if (!actual || e.source !== v.contentWindow || !e.data || !e.data.s2s) return;
-    const tipo = e.data.s2s.tipo;
-    if (tipo === "inicio" || tipo === "sigue") { sonando = true; ponerCapa(); return; }
-    sonando = false; ponerCapa();
-    if (tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
-    if (tipo !== "fin" || quiz) return;
+  // el video avisa con postMessage cuándo está listo, suena, se pausa y termina (reproduccion.js solo le
+  // cree al iframe del reproductor: el origen es opaco por el sandbox, así que se compara la ventana)
+  function terminoVideo() {
+    if (quiz) return;
     const cur = pos(st.cur), x = VIDEOS[cur];
     st = P.marcarVisto(st, x.id, hoy()); guardar();
     if (x.preguntas.length) { pintar(); preguntar(x); return; }
     if (cur < VIDEOS.length - 1) abrir(cur + 1, true); else pintar();
-  });
+  }
   $("ant").onclick = () => abrir(pos(st.cur) - 1, true);
   $("sig").onclick = () => abrir(pos(st.cur) + 1, true);
 
@@ -416,7 +419,9 @@
     const ta = $("expTxt"); ta.value = texto; ta.focus(); ta.select();
   }
   $("exp").onclick = async () => {
-    const texto = JSON.stringify(P.exportar(st, { titulo: actual.titulo, fecha: hoy(), generado: new Date().toISOString() }), null, 2);
+    const datos = Object.assign(P.exportar(st, { titulo: actual.titulo, fecha: hoy(), generado: new Date().toISOString() }),
+                                { cortes: R.cortes() });
+    const texto = JSON.stringify(datos, null, 2);
     try {
       if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("sin portapapeles");
       await navigator.clipboard.writeText(texto);

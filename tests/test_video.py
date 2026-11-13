@@ -30,6 +30,7 @@ def test_video_autocontenido(tmp_path, monkeypatch):
     html = reproductor.construir(d, tmp_path / "videos" / "t01.html", "La FK de multa").read_text(encoding="utf-8")
 
     assert "<audio" not in html and "assets/" not in html                 # nada fuera del archivo
+    assert "blur(" not in html                                            # en iOS un filter animado tira el video
     assert not re.findall(r'(?:src|href)="https?:', html)
     assert "<title>La FK de multa</title>" in html and "/*stub*/" in html
     assert html.index("window.__timelines = {}") < html.index("const S = ")   # el registro antes del motor
@@ -48,6 +49,7 @@ def test_indice(tmp_path):
     assert "window.Progreso" in s or "raiz.Progreso" in s        # progreso.js va embebido
     assert s.lower().count("</script") == s.lower().count("<script")
     assert "raiz.Cuestionario" in s and '"preguntas": []' in s  # cuestionario.js también; sin preguntas, lista vacía
+    assert "raiz.Reproduccion" in s                             # y reproduccion.js
 
 
 def test_indice_con_preguntas(tmp_path):
@@ -117,3 +119,11 @@ def test_estilos(tmp_path, estilo, color):
     html = (d / "index.html").read_text(encoding="utf-8")
     assert f'stroke="{color}"' in html                                   # el camino toma el color del estilo
     assert ("#f6f1e3" in html) == (estilo == "cuaderno")                 # papel solo en cuaderno
+
+
+def test_el_motor_no_anima_filtros():
+    """En iOS un filter animado (blur) sobre el mundo escalado reserva capas enormes: el proceso del iframe
+    se cae y el video vuelve a empezar. Ni engine.js ni engine.css usan filter."""
+    for nombre in ("engine.js", "engine.css"):
+        codigo = (SKILL / "scripts" / nombre).read_text(encoding="utf-8")
+        assert "blur(" not in codigo and not re.search(r"\bfilter\s*:", codigo), nombre

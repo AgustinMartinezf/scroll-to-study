@@ -95,8 +95,15 @@ PLAYER_JS = """
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new Promise((ok, mal) => ctx.decodeAudioData(bytes.buffer, ok, mal));
   }
+  // mientras suena, cada 2 s avisa por dónde va: si el iframe se recarga solo (iOS lo hace cuando el
+  // proceso del video se queda sin memoria), la lista lo retoma desde ahí y no desde el principio
+  let reloj = null;
+  function marcarReloj(prendido) {
+    clearInterval(reloj); reloj = null;
+    if (prendido) reloj = setInterval(() => { if (sonando) avisar("tiempo"); }, 2000);
+  }
   function terminar() {
-    sonando = false; pos = D; pintar(D);
+    sonando = false; pos = D; pintar(D); marcarReloj(false);
     boton.textContent = TX.otraVez; tapa.hidden = false; avisar("fin");
   }
   async function reproducir() {
@@ -114,20 +121,29 @@ PLAYER_JS = """
     fuente = ctx.createBufferSource(); fuente.buffer = buffer; fuente.connect(ctx.destination);
     fuente.onended = () => { if (sonando && ahora() >= D - 0.1) terminar(); };
     t0 = ctx.currentTime - pos; fuente.start(0, pos); sonando = true;
-    tapa.hidden = true; avisar(pos < 0.1 ? "inicio" : "sigue"); requestAnimationFrame(bucle);
+    tapa.hidden = true; avisar(pos < 0.1 ? "inicio" : "sigue"); marcarReloj(true); requestAnimationFrame(bucle);
   }
   tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
   function pausar() {
     if (!sonando) return;
     pos = ahora(); sonando = false; try { fuente.stop(); } catch (e) {}
+    marcarReloj(false);
     boton.textContent = TX.seguir; tapa.hidden = false; avisar("pausa");
   }
   root.addEventListener("click", pausar);
   // la lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un toque,
-  // queda la tapa) o pausar (su capa de gestos tapa el video mientras suena, así que el toque llega por acá)
+  // queda la tapa) o pausar (su capa de gestos tapa el video mientras suena, así que el toque llega por acá).
+  // "play" con "desde" retoma un video que se recargó solo: aunque el navegador exija un toque, la tapa
+  // queda en "Seguir" en ese punto.
   addEventListener("message", e => {
     if (!e.data) return;
-    if (e.data.s2s === "play" && !sonando) reproducir().catch(() => {});
+    if (e.data.s2s === "play" && !sonando) {
+      const desde = e.data.desde;
+      if (typeof desde === "number" && isFinite(desde) && desde > 0) {
+        pos = Math.min(desde, D); pintar(pos); boton.textContent = TX.seguir;
+      }
+      reproducir().catch(() => {});
+    }
     if (e.data.s2s === "pausa") pausar();
   });
   addEventListener("resize", encajar);
@@ -333,6 +349,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 </div>
 <script>__PROGRESO__</script>
 <script>__CUESTIONARIO__</script>
+<script>__REPRODUCCION__</script>
 <script>
 const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso, C = window.Cuestionario;
 const IDIOMA = document.documentElement.lang, QX = C.textos(IDIOMA);
@@ -383,8 +400,13 @@ function pintar() {
 }
 // capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
 const tactil = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-let arrancar = false, sonando = false, ini = null, quiz = null;
-const ponerCapa = () => capa.classList.toggle("activa", tactil && sonando);
+let ini = null, quiz = null;
+// lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
+const R = window.Reproduccion.conectar({
+  iframe: v, claveCortes: () => "s2s-cortes:" + document.title,
+  alCambiar: () => ponerCapa(), alFin: () => terminoVideo(),
+});
+const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
 function seguirConLoQueToca() {
   const t = P.queTocaHoy(st, VIDEOS, hoy());
@@ -408,7 +430,7 @@ function abrir(i, auto) {
   if (i < 0 || i >= VIDEOS.length) return;
   cerrarQuiz();
   st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
-  arrancar = auto; sonando = false; ponerCapa(); v.src = VIDEOS[i].archivo; pintar();
+  R.cargar(VIDEOS[i].id, auto); v.src = VIDEOS[i].archivo; pintar();
 }
 capa.addEventListener("pointerdown", e => {
   ini = { x: e.clientX, y: e.clientY };
@@ -421,19 +443,14 @@ capa.addEventListener("pointerup", e => {
   if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
   else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
 });
-// el video avisa con postMessage cuándo está listo, cuándo suena, se pausa y termina (cada .html también se ve solo)
-addEventListener("message", e => {
-  if (e.source !== v.contentWindow || !e.data || !e.data.s2s) return;
-  const tipo = e.data.s2s.tipo;
-  if (tipo === "inicio" || tipo === "sigue") { sonando = true; ponerCapa(); return; }
-  sonando = false; ponerCapa();
-  if (tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
-  if (tipo !== "fin" || quiz) return;
+// cuando el video termina: queda visto y vienen sus preguntas, o el siguiente
+function terminoVideo() {
+  if (quiz) return;
   const cur = pos(st.cur), x = VIDEOS[cur];
   st = P.marcarVisto(st, x.id, hoy()); guardar();
   if (x.preguntas.length) { pintar(); preguntar(x); return; }
   if (cur < VIDEOS.length - 1) abrir(cur + 1, true); else pintar();
-});
+}
 $("ant").onclick = () => abrir(pos(st.cur) - 1, true);
 $("sig").onclick = () => abrir(pos(st.cur) + 1, true);
 function avisar(texto) {
@@ -452,7 +469,9 @@ function mostrarJson(texto) {
   const ta = $("expTxt"); ta.value = texto; ta.focus(); ta.select();
 }
 $("exp").onclick = async () => {
-  const texto = JSON.stringify(P.exportar(st, { titulo: document.title, fecha: hoy(), generado: new Date().toISOString() }), null, 2);
+  const datos = Object.assign(P.exportar(st, { titulo: document.title, fecha: hoy(), generado: new Date().toISOString() }),
+                              { cortes: R.cortes() });
+  const texto = JSON.stringify(datos, null, 2);
   try {
     if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("sin portapapeles");
     await navigator.clipboard.writeText(texto);
@@ -490,6 +509,7 @@ LISTA = {
 
 PROGRESO_JS = Path(__file__).with_name("progreso.js")
 CUESTIONARIO_JS = Path(__file__).with_name("cuestionario.js")
+REPRODUCCION_JS = Path(__file__).with_name("reproduccion.js")
 
 
 def _json_en_script(x) -> str:
@@ -502,7 +522,8 @@ def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -
     reproduce cada video en un iframe; cuando termina, si el tema tiene preguntas las muestra encima del
     video y con el resultado decide cuándo vuelve el tema a repaso. Guarda qué temas se vieron cada día y
     el repaso en el navegador, con localStorage (si no está disponible, la lista anda igual sin recordar).
-    La lógica del progreso está en progreso.js y las preguntas en cuestionario.js; las dos van embebidas."""
+    La lógica del progreso está en progreso.js, las preguntas en cuestionario.js y lo que pasa con el iframe
+    del video (retomarlo si se recarga solo, registro de cortes) en reproduccion.js; las tres van embebidas."""
     datos = [{"id": str(v.get("id") or Path(v["archivo"]).stem), "archivo": v["archivo"], "titulo": v["titulo"],
               "pregunta": v.get("pregunta", ""), "duracion": round(float(v["duracion"]), 1),
               "preguntas": list(v.get("preguntas") or [])} for v in videos]
@@ -510,14 +531,15 @@ def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -
     if len(set(ids)) != len(ids):
         raise ValueError(f"ids de tema repetidos en la lista: {ids}")
     progreso, cuestionario = PROGRESO_JS.read_text(encoding="utf-8"), CUESTIONARIO_JS.read_text(encoding="utf-8")
-    for nombre, js in (("progreso.js", progreso), ("cuestionario.js", cuestionario)):
+    reproduccion = REPRODUCCION_JS.read_text(encoding="utf-8")
+    for nombre, js in (("progreso.js", progreso), ("cuestionario.js", cuestionario), ("reproduccion.js", reproduccion)):
         if "</script" in js.lower():
             raise ValueError(f"{nombre} no puede contener </script")
     valores = {"IDIOMA": idioma, "TITULO": html.escape(titulo), "SUB": html.escape(TEXTOS[idioma]["sub"]),
                "VIDEOS": _json_en_script(datos), "TX": _json_en_script(LISTA[idioma]), "PROGRESO": progreso,
-               "CUESTIONARIO": cuestionario}
+               "CUESTIONARIO": cuestionario, "REPRODUCCION": reproduccion}
     # una sola pasada: un título que contenga "__TX__" no se reemplaza dos veces
-    s = re.sub(r"__(IDIOMA|TITULO|SUB|VIDEOS|TX|PROGRESO|CUESTIONARIO)__", lambda m: valores[m[1]], INDICE)
+    s = re.sub(r"__(IDIOMA|TITULO|SUB|VIDEOS|TX|PROGRESO|CUESTIONARIO|REPRODUCCION)__", lambda m: valores[m[1]], INDICE)
     destino.write_text(s, encoding="utf-8")
     return destino
 
