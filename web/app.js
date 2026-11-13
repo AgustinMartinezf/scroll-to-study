@@ -5,12 +5,14 @@
  *   clave = JSON.stringify([titulo, id])). Un paquete por materia; reimportar el mismo título lo reemplaza.
  * - El progreso es el de progreso.js, en localStorage con la clave "s2s:" + titulo, igual que la lista
  *   de la compu (cada navegador tiene el suyo).
+ * - Después de cada video, si el tema trae preguntas (paquete v2), se muestran encima del reproductor con
+ *   cuestionario.js, igual que en la lista de la compu, y el resultado decide cuándo vuelve el tema.
  * - Cada video corre en un iframe sandbox (sin allow-same-origin) desde una URL blob: no puede leer los
  *   otros paquetes ni el progreso. Habla con la lista por postMessage, como en videos/index.html.
  */
 (function () {
   "use strict";
-  const P = window.Progreso, PQ = window.Paquete;
+  const P = window.Progreso, PQ = window.Paquete, C = window.Cuestionario;
 
   const TEXTOS = {
     es: {
@@ -90,13 +92,14 @@
   const TX = TEXTOS[IDIOMA];
   const fmt = (s, d) => s.replace(/\{(\w+)\}/g, (m, k) => (k in d ? d[k] : m));
   document.documentElement.lang = IDIOMA;
+  const QX = C.textos(IDIOMA);
 
   const $ = id => document.getElementById(id);
   const v = $("v"), capa = $("capa");
   for (const id of ["importar", "vTitulo", "vTexto", "vPrivado", "iTitulo", "iPaso1", "iPaso2", "iPaso3",
                     "iSeparado", "importarIgual", "sub", "ant", "sig", "cero"]) $(id).textContent = TX[id];
   $("borrarPaq").textContent = TX.borrar; $("exp").textContent = TX.exportar;
-  $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos;
+  $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos; $("lHoy").textContent = QX.paraHoy;
   $("paquetes").setAttribute("aria-label", TX.elegir);
 
   // ---------------------------------------------------------------------------------------------
@@ -220,14 +223,16 @@
     actual = paquetes.find(p => p.titulo === titulo) || paquetes[0] || null;
     if (!actual) { quitarLS(ACTUAL); VIDEOS = []; pintarApp(); return; }
     ponerLS(ACTUAL, actual.titulo);
-    VIDEOS = actual.videos;
+    // los paquetes guardados antes de las preguntas no tienen "preguntas"
+    VIDEOS = actual.videos.map(x => Object.assign({ preguntas: [] }, x));
     CLAVE = "s2s:" + actual.titulo;
     st = P.cargar(leerLS(CLAVE), VIDEOS);
     guardar();
     document.title = actual.titulo;
     $("titulo").textContent = actual.titulo;
     pintarApp();
-    abrir(pos(P.queTocaHoy(st, VIDEOS, hoy())), false);   // se abre lo que toca hoy
+    const inicial = P.queTocaHoy(st, VIDEOS, hoy());
+    abrir(pos(inicial === null ? st.cur : inicial), false);   // lo que toca hoy (o el último, si no queda nada)
   }
 
   async function recargar(titulo) {
@@ -301,12 +306,17 @@
       const t = document.createElement("span"); t.className = "t";
       const tb = document.createElement("b"); tb.textContent = x.titulo;
       const ts = document.createElement("span"); ts.textContent = x.pregunta; t.append(tb, ts);
+      const e = P.estadoTema(st, x, hoy()); li.dataset.rep = e.estado;
+      t.append(C.chip(document, e, e.proxima ? P.diasEntre(hoy(), e.proxima) : 0, IDIOMA));
       const d = document.createElement("span"); d.className = "dur"; d.textContent = mmss(x.duracion);
       b.append(n, t, d); b.onclick = () => abrir(i, true); li.append(b); ol.append(li);
     });
-    const it = pos(toca);
-    $("tToca").textContent = VIDEOS[it].titulo; $("toca").onclick = () => abrir(it, true);
-    $("nToca").textContent = fmt(TX.de, { n: it + 1, t: VIDEOS.length });
+    // si hoy no queda nada, se dice, y cualquier video de la lista se puede ver igual
+    const it = toca === null ? -1 : pos(toca);
+    $("toca").disabled = it < 0;
+    $("tToca").textContent = it < 0 ? QX.nada : VIDEOS[it].titulo; $("toca").onclick = () => abrir(it, true);
+    $("nToca").textContent = it < 0 ? "" : fmt(TX.de, { n: it + 1, t: VIDEOS.length });
+    $("nHoy").textContent = P.pendientesHoy(st, VIDEOS, hoy()).length;
     const r = P.racha(st, hoy());
     $("nRacha").textContent = r; $("lRacha").textContent = r === 1 ? TX.racha1 : TX.racha;
     const n = VIDEOS.filter(x => vistos.has(x.id)).length;
@@ -319,11 +329,32 @@
 
   // capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
   const tactil = (window.matchMedia && matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0;
-  let arrancar = false, sonando = false, ini = null, urlActual = null, turno = 0;
+  let arrancar = false, sonando = false, ini = null, urlActual = null, turno = 0, quiz = null;
   const ponerCapa = () => capa.classList.toggle("activa", tactil && sonando);
+
+  function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
+  function seguirConLoQueToca() {
+    const t = P.queTocaHoy(st, VIDEOS, hoy());
+    if (t !== null) abrir(pos(t), true); else pintar();
+  }
+  // después del video, sus preguntas (cuestionario.js); el resultado decide cuándo vuelve el tema (progreso.js)
+  function preguntar(x) {
+    cerrarQuiz();
+    quiz = C.mostrar(document.querySelector(".caja"), {
+      idioma: IDIOMA, preguntas: x.preguntas,
+      alTerminar: (aciertos, total) => {
+        st = P.responder(st, x.id, aciertos, total, hoy()); guardar(); pintar();
+        const t = P.queTocaHoy(st, VIDEOS, hoy());
+        return { dias: P.diasEntre(hoy(), st.repaso[x.id].proxima), siguiente: t === null ? null : VIDEOS[pos(t)].titulo };
+      },
+      alSeguir: () => { quiz = null; seguirConLoQueToca(); },
+      alSaltear: () => { quiz = null; seguirConLoQueToca(); },   // no cuenta como respuesta: ya quedó visto
+    });
+  }
 
   function detenerVideo() {
     turno++;
+    cerrarQuiz();
     sonando = false; ponerCapa();
     v.removeAttribute("src");
     if (urlActual) { URL.revokeObjectURL(urlActual); urlActual = null; }
@@ -331,6 +362,7 @@
 
   async function abrir(i, auto) {
     if (!actual || i < 0 || i >= VIDEOS.length) return;
+    cerrarQuiz();
     st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
     arrancar = auto; sonando = false; ponerCapa(); pintar();
     const mio = ++turno, titulo = actual.titulo;
@@ -363,9 +395,10 @@
     if (tipo === "inicio" || tipo === "sigue") { sonando = true; ponerCapa(); return; }
     sonando = false; ponerCapa();
     if (tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
-    if (tipo !== "fin") return;
-    const cur = pos(st.cur);
-    st = P.marcarVisto(st, VIDEOS[cur].id, hoy()); guardar();
+    if (tipo !== "fin" || quiz) return;
+    const cur = pos(st.cur), x = VIDEOS[cur];
+    st = P.marcarVisto(st, x.id, hoy()); guardar();
+    if (x.preguntas.length) { pintar(); preguntar(x); return; }
     if (cur < VIDEOS.length - 1) abrir(cur + 1, true); else pintar();
   });
   $("ant").onclick = () => abrir(pos(st.cur) - 1, true);

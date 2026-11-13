@@ -1,6 +1,6 @@
 {
   "name": "scroll-to-study",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Turns your study material into short vertical videos with voice (English or Spanish), with every fact checked against the material. For understanding a project or studying a course for an exam.",
   "license": "AGPL-3.0-only",
   "keywords": [

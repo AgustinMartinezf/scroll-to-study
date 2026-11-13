@@ -1,6 +1,9 @@
 """Las preguntas de práctica de cada tema: S2S preguntas pide (sin preguntas.json) y valida (con él)."""
 import copy
 import json
+import os
+import re
+import time
 
 import pytest
 import s2s
@@ -212,3 +215,59 @@ def test_fuente_para_comprobar_va_a_la_persona(t, capsys):
     p.write_text(json.dumps(inv), encoding="utf-8")
     codigo, out = _validar(t, capsys, BUENAS)
     assert codigo == 1 and "PREGUNTAR  pregunta q2: A3 está para comprobar" in out
+
+
+# Después de validarlas, las preguntas salen en la lista (s2s.py videos) y en el paquete (s2s.py paquete)
+def _videos_en_la_lista(t):
+    html = (t / "videos" / "index.html").read_text(encoding="utf-8")
+    return json.loads(re.search(r"const VIDEOS = (\[.*?\]), TX = ", html)[1])
+
+
+def _con_video(t, tema="t01"):
+    """Un video ya hecho, más nuevo que su spec.json: s2s.py videos no lo rehace (no hace falta Piper)."""
+    d = t / tema
+    d.mkdir(exist_ok=True)
+    (d / "spec.json").write_text("{}", encoding="utf-8")
+    (d / "timing.json").write_text(json.dumps({"duration": 40.0}), encoding="utf-8")
+    (t / "videos").mkdir(exist_ok=True)
+    html = t / "videos" / f"{tema}.html"
+    html.write_text("<!doctype html><html><body>video</body></html>", encoding="utf-8")
+    futuro = time.time() + 60
+    os.utime(html, (futuro, futuro))
+
+
+def test_las_preguntas_validadas_llegan_a_la_lista_y_al_paquete_con_la_marca_general(tmp_path, capsys):
+    t = _con_general(tmp_path)
+    p = {"preguntas": copy.deepcopy(BUENAS["preguntas"][:2])}
+    p["preguntas"][1]["fuentes"] = ["A3", "G1"]
+    p["preguntas"][1]["explicacion"] = "Método general, no está en tu material: " + p["preguntas"][1]["explicacion"]
+    codigo, out = _validar(t, capsys, p)
+    assert codigo == 0, out
+    _con_video(t)
+    assert s2s.main(["videos", "-t", str(t), "--titulo", "Bases"]) == 0
+    assert "AVISO" not in capsys.readouterr().out
+    [v] = _videos_en_la_lista(t)
+    assert [(q["id"], q["correcta"], q["general"]) for q in v["preguntas"]] == [("q1", 1, False), ("q2", 0, True)]
+    assert v["preguntas"][0]["opciones"] == BUENAS["preguntas"][0]["opciones"] and "fuentes" not in v["preguntas"][0]
+
+    assert s2s.main(["paquete", "-t", str(t)]) == 0
+    paq = json.loads((t / "Bases.s2s.json").read_text(encoding="utf-8"))
+    assert paq["v"] == 2 and paq["videos"][0]["preguntas"] == v["preguntas"]
+
+
+def test_preguntas_editadas_despues_de_validar_no_salen_en_la_lista(t, capsys):
+    _validar(t, capsys, BUENAS)
+    _con_video(t)
+    s2s.main(["videos", "-t", str(t)])
+    assert len(_videos_en_la_lista(t)[0]["preguntas"]) == 3
+    p = _buenas()
+    p["preguntas"][0]["opciones"][1] = "A prestamo, a los 30 días"     # cambia después de validar
+    _escribir(t, p)
+    capsys.readouterr()
+    assert s2s.main(["videos", "-t", str(t)]) == 0
+    out = capsys.readouterr().out
+    assert _videos_en_la_lista(t)[0]["preguntas"] == []
+    assert f"AVISO  t01: preguntas.json no se validó o cambió después de validarlo; va sin preguntas " \
+           f"(corré s2s.py preguntas -t {t} --tema t01)" in out
+    # los .html de los videos no cambian: las preguntas solo van en la lista
+    assert (t / "videos" / "t01.html").read_text(encoding="utf-8") == "<!doctype html><html><body>video</body></html>"

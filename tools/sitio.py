@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Builds the phone app's site (what GitHub Pages publishes) into a folder, to test it locally.
 
-    python3 tools/sitio.py [_site]          # web/ + progreso.js -> _site/
+    python3 tools/sitio.py [_site]          # web/ + progreso.js + cuestionario.js -> _site/
     python3 -m http.server -d _site 8000    # then open http://localhost:8000/
     python3 tools/sitio.py --iconos         # regenerate web/iconos/ from .claude-plugin/icon.png (needs Pillow)
 
-progreso.js has a single source (skills/scroll-to-study/scripts/progreso.js) and is copied here, not
-kept in web/. The service worker gets a version (a hash of every file of the site) and the list of
+progreso.js and cuestionario.js have a single source (skills/scroll-to-study/scripts/, shared with the
+computer playlist) and are copied here, not kept in web/. The service worker gets a version (a hash of every file of the site) and the list of
 files to cache, so every published change uses a new cache. .github/workflows/pages.yml runs this same
 script.
 """
@@ -21,17 +21,21 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 WEB = RAIZ / "web"
 PROGRESO = RAIZ / "skills" / "scroll-to-study" / "scripts" / "progreso.js"
+CUESTIONARIO = PROGRESO.with_name("cuestionario.js")
+COMPARTIDOS = (PROGRESO, CUESTIONARIO)       # una sola fuente, compartida con la lista de la compu
 ICONO = RAIZ / ".claude-plugin" / "icon.png"
 ICONOS = {"icono-192.png": 192, "icono-512.png": 512, "apple-touch-icon.png": 180}
 
 
 def armar(destino: Path) -> Path:
-    if (WEB / "progreso.js").exists():
-        raise SystemExit("web/progreso.js must not exist: the only source is skills/scroll-to-study/scripts/progreso.js")
+    for js in COMPARTIDOS:
+        if (WEB / js.name).exists():
+            raise SystemExit(f"web/{js.name} must not exist: the only source is skills/scroll-to-study/scripts/{js.name}")
     if destino.exists():
         shutil.rmtree(destino)
     shutil.copytree(WEB, destino)
-    shutil.copy2(PROGRESO, destino / "progreso.js")
+    for js in COMPARTIDOS:
+        shutil.copy2(js, destino / js.name)
     archivos = sorted(p.relative_to(destino).as_posix() for p in destino.rglob("*") if p.is_file() and p.name != "sw.js")
     huella = hashlib.sha256()
     for nombre in archivos + ["sw.js"]:

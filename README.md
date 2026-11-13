@@ -37,8 +37,28 @@ your material ──► inventory of statements ──► checked by code (verba
   that browser only, which days you watched each video, opens the one that is up today and shows your
   streak; "Export progress" copies that history as JSON so you can share it. On a touch screen, swipe
   up or down on a playing video for the next or previous one.
+- After each video come 2 or 3 multiple-choice questions on its topic, checked against the same
+  statements as the script. Your answers decide when the topic comes back (see [Review](#review)).
 - With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
   each type of exercise and the general method and traps, labeled as "general method".
+
+## Review
+
+When a video ends, its questions show up over the player, one at a time. After you pick an answer,
+the right one turns green, yours turns red if it was wrong, and the explanation appears. Questions
+built on a general method (not from your material) are labeled as such.
+
+The answers set when the topic comes back, with three levels:
+
+- any wrong answer: back to level 0, the topic is due **tomorrow**;
+- all right: up one level, due in **3 days** (level 1) or **7 days** (level 2, the top).
+
+"Up today" opens overdue topics first (the most overdue first) and then the ones you have never
+watched, in order. When nothing is left it says "Nothing left for today", and you can still watch any
+video. Each topic in the list says whether it is due today, up to date or new, and the header shows how
+many are due. "Skip questions" leaves the topic as watched without counting as an answer. Topics without
+questions are simply watched or not. All of this stays in that browser (or in the phone app), and
+"Export progress" includes it.
 
 ## Guide
 
@@ -104,7 +124,7 @@ scroll-to-study/
   corpus.txt          your material, numbered by line (what Claude reads)
   inventario.json     statements with source, quote and state (ok / comprobar / general)
   temas.json          the topics you picked
-  t01/ … t20/         guion.json, preguntas.json (practice questions, not in the videos yet)
+  t01/ … t20/         guion.json, preguntas.json (practice questions, asked after each video)
                       + what the compiler and the voice generate
   videos/index.html   the playlist
   registro.jsonl      when and how many times each stage ran
@@ -125,8 +145,9 @@ player; your videos never go there. You import them from a file and they stay st
    storage, separate from Safari, so videos imported in Safari do not show up in the app.
 4. Send yourself the `.s2s.json` (WhatsApp, AirDrop, Drive) and save it to your phone's files.
 5. In the app, tap "Import videos" and pick the file. That is all: it opens with airplane mode on,
-   keeps your progress (today's topic, streak, watched) on the phone and can hold one package per
-   course. Importing a package with the same title again replaces its videos and keeps your progress.
+   asks the questions after each video, keeps your progress (today's topics, review, streak, watched)
+   on the phone and can hold one package per course. Packages made by 0.2.0 still import, without
+   questions. Importing a package with the same title again replaces its videos and keeps your progress.
 
 The app asks the browser to keep its storage (so the phone does not clear it when it runs low on
 space) and shows how much it uses.
@@ -173,10 +194,11 @@ the animation follows the audio, that nothing important falls outside the TikTok
 zones, and that the picture never stays still for more than a second (needs `playwright`).
 
 The phone app is in `web/`. `tools/sitio.py` builds the published site into `_site/` (it adds
-`progreso.js`, which only lives in `skills/scroll-to-study/scripts/`, and versions the service worker's
-cache); serve it with `python -m http.server -d _site 8000` to try it. `.github/workflows/pages.yml`
+`progreso.js` and `cuestionario.js`, which only live in `skills/scroll-to-study/scripts/`, and versions
+the service worker's cache); serve it with `python -m http.server -d _site 8000` to try it. `.github/workflows/pages.yml`
 publishes it to GitHub Pages on every push to `main` that touches it. Its tests
-(`tests/test_app_web.py`) need `playwright` with Chromium and are skipped without them.
+(`tests/test_app_web.py`, and `tests/test_lista_navegador.py` for the playlist) need `playwright` with
+Chromium and are skipped without them.
 
 The tests use an invented project (`tests/fixtures/biblioteca`) and a silent voice, so they need
 neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (names are in Spanish):
@@ -192,6 +214,7 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 | `reproductor.py` + `sonido.py` | Mixes the audio and outputs a `.html` that plays by itself |
 | `mp4.py` | Optional: exports a video `.html` to `.mp4` with Playwright and ffmpeg |
 | `paquete.py` | Puts every video in one `.s2s.json` for the phone app |
+| `progreso.js` + `cuestionario.js` | Progress and review (pure functions) and the questions after each video; shared by the playlist and the phone app |
 | `diagnostico.py` | Checks Python, the packages, the voices, gsap and KaTeX, and says how to fix what is missing |
 
 ## License

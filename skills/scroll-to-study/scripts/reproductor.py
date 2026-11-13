@@ -300,12 +300,14 @@ li button { width:100%; display:grid; grid-template-columns:32px minmax(0,1fr) a
 li.cur button { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
 li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; height:28px; display:flex;
   align-items:center; justify-content:center; }
+#toca:disabled { opacity:.8; cursor:default; }
 @media (prefers-reduced-motion:reduce) { .barra i { transition:none; } }
 </style></head><body>
 <div class="wrap">
   <header>
     <div><h1>__TITULO__</h1><p class="sub">__SUB__</p></div>
     <div class="stats">
+      <div class="stat"><b id="nHoy">0</b><span id="lHoy"></span></div>
       <div class="stat"><b id="nRacha">0</b><span id="lRacha"></span></div>
       <div class="stat"><b id="nVistos">0 / 0</b><span id="lVistos"></span></div>
     </div>
@@ -330,8 +332,10 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
   </div>
 </div>
 <script>__PROGRESO__</script>
+<script>__CUESTIONARIO__</script>
 <script>
-const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso;
+const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso, C = window.Cuestionario;
+const IDIOMA = document.documentElement.lang, QX = C.textos(IDIOMA);
 const CLAVE = "s2s:" + document.title, hoy = () => P.fechaLocal(new Date());
 let st = P.vacio(VIDEOS);
 try { st = P.cargar(localStorage.getItem(CLAVE), VIDEOS); } catch (e) {}
@@ -342,6 +346,7 @@ const pos = id => Math.max(0, VIDEOS.findIndex(x => x.id === id));
 const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 $("ant").textContent = TX.ant; $("sig").textContent = TX.sig; $("cero").textContent = TX.cero;
 $("exp").textContent = TX.exportar; $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos;
+$("lHoy").textContent = QX.paraHoy;
 function vistosAlgunaVez() {
   const s = new Set(); for (const f in st.dias) for (const id of st.dias[f]) s.add(id); return s;
 }
@@ -356,12 +361,17 @@ function pintar() {
     const t = document.createElement("span"); t.className = "t";
     const tb = document.createElement("b"); tb.textContent = x.titulo;
     const ts = document.createElement("span"); ts.textContent = x.pregunta; t.append(tb, ts);
+    const e = P.estadoTema(st, x, hoy()); li.dataset.rep = e.estado;
+    t.append(C.chip(document, e, e.proxima ? P.diasEntre(hoy(), e.proxima) : 0, IDIOMA));
     const d = document.createElement("span"); d.className = "dur"; d.textContent = mmss(x.duracion);
     b.append(n, t, d); b.onclick = () => abrir(i, true); li.append(b); ol.append(li);
   });
-  const it = pos(toca);
-  $("tToca").textContent = VIDEOS[it].titulo; $("toca").onclick = () => abrir(it, true);
-  $("nToca").textContent = TX.de.replace("{n}", it + 1).replace("{t}", VIDEOS.length);
+  // si hoy no queda nada, se dice, y cualquier video de la lista se puede ver igual
+  const it = toca === null ? -1 : pos(toca);
+  $("toca").disabled = it < 0;
+  $("tToca").textContent = it < 0 ? QX.nada : VIDEOS[it].titulo; $("toca").onclick = () => abrir(it, true);
+  $("nToca").textContent = it < 0 ? "" : TX.de.replace("{n}", it + 1).replace("{t}", VIDEOS.length);
+  $("nHoy").textContent = P.pendientesHoy(st, VIDEOS, hoy()).length;
   const r = P.racha(st, hoy());
   $("nRacha").textContent = r; $("lRacha").textContent = r === 1 ? TX.racha1 : TX.racha;
   const n = VIDEOS.filter(x => vistos.has(x.id)).length;
@@ -373,10 +383,30 @@ function pintar() {
 }
 // capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
 const tactil = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-let arrancar = false, sonando = false, ini = null;
+let arrancar = false, sonando = false, ini = null, quiz = null;
 const ponerCapa = () => capa.classList.toggle("activa", tactil && sonando);
+function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
+function seguirConLoQueToca() {
+  const t = P.queTocaHoy(st, VIDEOS, hoy());
+  if (t !== null) abrir(pos(t), true); else pintar();
+}
+// después del video, sus preguntas (cuestionario.js); el resultado decide cuándo vuelve el tema (progreso.js)
+function preguntar(x) {
+  cerrarQuiz();
+  quiz = C.mostrar(document.querySelector(".caja"), {
+    idioma: IDIOMA, preguntas: x.preguntas,
+    alTerminar: (aciertos, total) => {
+      st = P.responder(st, x.id, aciertos, total, hoy()); guardar(); pintar();
+      const t = P.queTocaHoy(st, VIDEOS, hoy());
+      return { dias: P.diasEntre(hoy(), st.repaso[x.id].proxima), siguiente: t === null ? null : VIDEOS[pos(t)].titulo };
+    },
+    alSeguir: () => { quiz = null; seguirConLoQueToca(); },
+    alSaltear: () => { quiz = null; seguirConLoQueToca(); },   // no cuenta como respuesta: ya quedó visto
+  });
+}
 function abrir(i, auto) {
   if (i < 0 || i >= VIDEOS.length) return;
+  cerrarQuiz();
   st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
   arrancar = auto; sonando = false; ponerCapa(); v.src = VIDEOS[i].archivo; pintar();
 }
@@ -398,9 +428,10 @@ addEventListener("message", e => {
   if (tipo === "inicio" || tipo === "sigue") { sonando = true; ponerCapa(); return; }
   sonando = false; ponerCapa();
   if (tipo === "listo") { if (arrancar) v.contentWindow.postMessage({ s2s: "play" }, "*"); return; }
-  if (tipo !== "fin") return;
-  const cur = pos(st.cur);
-  st = P.marcarVisto(st, VIDEOS[cur].id, hoy()); guardar();
+  if (tipo !== "fin" || quiz) return;
+  const cur = pos(st.cur), x = VIDEOS[cur];
+  st = P.marcarVisto(st, x.id, hoy()); guardar();
+  if (x.preguntas.length) { pintar(); preguntar(x); return; }
   if (cur < VIDEOS.length - 1) abrir(cur + 1, true); else pintar();
 });
 $("ant").onclick = () => abrir(pos(st.cur) - 1, true);
@@ -438,7 +469,8 @@ $("cero").onclick = () => {
   no.onclick = () => caja.remove();
   caja.append(q, si, no); $("cero").after(caja);
 };
-abrir(pos(P.queTocaHoy(st, VIDEOS, hoy())), false);   // se abre lo que toca hoy
+const inicial = P.queTocaHoy(st, VIDEOS, hoy());
+abrir(pos(inicial === null ? st.cur : inicial), false);   // se abre lo que toca hoy (o el último, si no queda nada)
 </script>
 </body></html>
 """
@@ -457,6 +489,7 @@ LISTA = {
 }
 
 PROGRESO_JS = Path(__file__).with_name("progreso.js")
+CUESTIONARIO_JS = Path(__file__).with_name("cuestionario.js")
 
 
 def _json_en_script(x) -> str:
@@ -464,22 +497,27 @@ def _json_en_script(x) -> str:
 
 
 def indice(destino: Path, titulo: str, videos: list[dict], idioma: str = "es") -> Path:
-    """videos: [{id, archivo, titulo, pregunta, duracion}] en el orden en que se ven (sin id, se usa el
-    nombre del archivo). La lista reproduce cada video en un iframe, pasa al siguiente cuando termina y
-    guarda qué temas se vieron cada día (en el navegador, con localStorage; si no está disponible, la
-    lista anda igual sin recordar). La lógica del progreso está en progreso.js y va embebida."""
+    """videos: [{id, archivo, titulo, pregunta, duracion, preguntas?}] en el orden en que se ven (sin id, se
+    usa el nombre del archivo). preguntas: las de etapas.preguntas_listas (validadas), o nada. La lista
+    reproduce cada video en un iframe; cuando termina, si el tema tiene preguntas las muestra encima del
+    video y con el resultado decide cuándo vuelve el tema a repaso. Guarda qué temas se vieron cada día y
+    el repaso en el navegador, con localStorage (si no está disponible, la lista anda igual sin recordar).
+    La lógica del progreso está en progreso.js y las preguntas en cuestionario.js; las dos van embebidas."""
     datos = [{"id": str(v.get("id") or Path(v["archivo"]).stem), "archivo": v["archivo"], "titulo": v["titulo"],
-              "pregunta": v.get("pregunta", ""), "duracion": round(float(v["duracion"]), 1)} for v in videos]
+              "pregunta": v.get("pregunta", ""), "duracion": round(float(v["duracion"]), 1),
+              "preguntas": list(v.get("preguntas") or [])} for v in videos]
     ids = [d["id"] for d in datos]
     if len(set(ids)) != len(ids):
         raise ValueError(f"ids de tema repetidos en la lista: {ids}")
-    progreso = PROGRESO_JS.read_text(encoding="utf-8")
-    if "</script" in progreso.lower():
-        raise ValueError("progreso.js no puede contener </script")
+    progreso, cuestionario = PROGRESO_JS.read_text(encoding="utf-8"), CUESTIONARIO_JS.read_text(encoding="utf-8")
+    for nombre, js in (("progreso.js", progreso), ("cuestionario.js", cuestionario)):
+        if "</script" in js.lower():
+            raise ValueError(f"{nombre} no puede contener </script")
     valores = {"IDIOMA": idioma, "TITULO": html.escape(titulo), "SUB": html.escape(TEXTOS[idioma]["sub"]),
-               "VIDEOS": _json_en_script(datos), "TX": _json_en_script(LISTA[idioma]), "PROGRESO": progreso}
+               "VIDEOS": _json_en_script(datos), "TX": _json_en_script(LISTA[idioma]), "PROGRESO": progreso,
+               "CUESTIONARIO": cuestionario}
     # una sola pasada: un título que contenga "__TX__" no se reemplaza dos veces
-    s = re.sub(r"__(IDIOMA|TITULO|SUB|VIDEOS|TX|PROGRESO)__", lambda m: valores[m[1]], INDICE)
+    s = re.sub(r"__(IDIOMA|TITULO|SUB|VIDEOS|TX|PROGRESO|CUESTIONARIO)__", lambda m: valores[m[1]], INDICE)
     destino.write_text(s, encoding="utf-8")
     return destino
 

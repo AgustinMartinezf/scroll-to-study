@@ -1,6 +1,7 @@
 """Reglas compartidas entre etapas: qué temas son válidos, qué ve el guion, qué errores son de quién."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -234,6 +235,36 @@ def validar_preguntas(datos: Any, inv: dict[str, Any], tema: dict[str, Any]) -> 
     if len(validos) != len(set(validos)):
         errores.append("hay ids de pregunta repetidos")
     return errores, avisos
+
+
+def huella(p: Path) -> str:
+    """sha256 del archivo: preguntas_reporte.json la guarda para saber qué versión se validó."""
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def preguntas_listas(carpeta: Path, inv: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str | None]:
+    """Las preguntas de T/tNN que pueden salir en la lista y en la app: (preguntas, motivo si no salen).
+
+    Solo salen si preguntas_reporte.json dice que se validaron sin errores y su huella coincide con el
+    preguntas.json de ahora (si se editó después de validar, no salen). Cada pregunta sale con lo que
+    hace falta para mostrarla y "general": true si alguna de sus fuentes es un método general (la
+    interfaz lo etiqueta). motivo es None si salen, o "sin_archivo", "sin_validar" o "con_errores"."""
+    carpeta = Path(carpeta)
+    archivo, reporte = carpeta / "preguntas.json", carpeta / "preguntas_reporte.json"
+    if not archivo.exists():
+        return [], "sin_archivo"
+    try:
+        rep = leer(reporte) if reporte.exists() else {}
+    except json.JSONDecodeError:
+        rep = {}
+    if not isinstance(rep, dict) or rep.get("huella") != huella(archivo):
+        return [], "sin_validar"
+    if rep.get("errores"):
+        return [], "con_errores"
+    generales = {a["id"] for a in (inv or {}).get("afirmaciones", []) if a.get("estado") == "general"}
+    return [{"id": p["id"], "texto": p["texto"], "opciones": list(p["opciones"]), "correcta": p["correcta"],
+             "explicacion": p["explicacion"], "general": any(f in generales for f in p["fuentes"])}
+            for p in leer(archivo)["preguntas"]], None
 
 
 # El código comprueba que la cita esté en la fuente, pero no que la afirmación se siga de ella: una

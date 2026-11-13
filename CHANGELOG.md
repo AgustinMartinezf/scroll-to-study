@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- The practice questions are shown after each video, in the playlist and in the phone app: one at a
+  time, with the right answer in green, a wrong one in red and the explanation. Questions built on a
+  general method are labeled. Only questions validated without errors, and not edited since, are
+  shown; `s2s.py videos` and `s2s.py paquete` warn about the topics that go without them.
+- Spaced review: a wrong answer brings the topic back tomorrow, all right moves it up a level (back in
+  3 days, then 7). "Up today" opens overdue topics first and then new ones, and says "Nothing left for
+  today" when there is nothing due. Each topic in the list shows whether it is due today, up to date or
+  new, and the header shows how many are due. "Skip questions" leaves the topic as watched.
+- "Export progress" includes the review history.
+
+### Changed
+
+- Phone packages are now version 2 (they carry the questions). The app still imports version 1
+  packages, without questions.
+- Saved progress moves to version 3 (adds the review). Progress from 0.2.0 is migrated on load.
+- When every topic is watched and none is due, "Up today" no longer reopens the one watched longest
+  ago: it says there is nothing left for today.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added
@@ -49,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AgustinMartinezf/scroll-to-study/releases/tag/v0.1.0
