@@ -167,12 +167,27 @@ If `video` warns that something appears right before the camera changes scene, m
 earlier in the script or add a short sentence after it, validate again and redo that video.
 
 When done, say in two or three lines how many videos were made, which were not and why, and where to
-open the playlist. Suggest watching one a day, in order.
+open the playlist. Suggest watching one a day, in order, and offer `S2S paquete` (step 7) if they want
+the videos on their phone.
 
 ## 7. On the phone (optional)
 
 The `.html` videos do not play from the Files app on an iPhone (its preview does not run JavaScript).
-If the person wants to watch them on their phone, offer to export them to MP4:
+If the person wants the videos on their phone, offer the phone app first:
+
+    S2S paquete -t T [--titulo "<name>"]   # every video in T/videos/ -> T/<title>.s2s.json
+
+The title defaults to the playlist's. It prints the file's size and the topics that have no video
+yet (they are not in the package). Then tell them, in their language:
+1. Open https://agustinmartinezf.github.io/scroll-to-study/ on the phone, in Safari (iPhone) or Chrome
+   (Android), and add it to the home screen (iPhone: Share → Add to Home Screen). Open it from the
+   home screen from then on: on iPhone the installed app keeps its own storage, separate from Safari.
+2. Send themselves the `.s2s.json` (WhatsApp, AirDrop, Drive) and tap "Import videos" in the app.
+The app is only an empty player: the videos are stored on their phone and are never uploaded, and it
+works offline. After redoing videos, run `paquete` again and import it again: same title, so it
+replaces the videos and keeps their progress.
+
+If they prefer plain video files (Photos, WhatsApp), export them to MP4 instead:
 
     S2S mp4 -t T                    # every video in T/videos/ -> T/mp4/t01.mp4, …
     S2S mp4 -t T --tema t01         # just one; --alto 1280 (the default) sets the height

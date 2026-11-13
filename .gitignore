@@ -4,3 +4,4 @@ __pycache__/
 # carpetas de trabajo de quien prueba la herramienta acá adentro (tienen material personal)
 /scroll-to-study/
 /videos/
+_site/

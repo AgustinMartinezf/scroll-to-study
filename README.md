@@ -94,11 +94,29 @@ scroll-to-study/
 
 ## On your phone
 
-The `.html` videos open in a phone's browser, but on an iPhone they do not play from the Files app,
-because its preview does not run JavaScript. To watch them anywhere, ask Claude to export them to MP4
-(or run `s2s.py mp4 -t scroll-to-study` yourself): each video becomes `scroll-to-study/mp4/t01.mp4`, …,
-which you can send to your phone and watch offline in Photos or WhatsApp. It is optional and needs
-`playwright` (`pip install playwright`, then `playwright install chromium`) and
+The `.html` videos do not play from the Files app on an iPhone (its preview does not run JavaScript).
+The way to watch them on your phone, offline, is the **scroll to study app**: a page you install on
+your home screen, at <https://agustinmartinezf.github.io/scroll-to-study/>. It is only the empty
+player; your videos never go there. You import them from a file and they stay stored on your phone.
+
+1. On your computer, ask Claude for the phone package (or run `s2s.py paquete -t scroll-to-study`). It
+   writes `scroll-to-study/<title>.s2s.json`, with every video in one file.
+2. On your phone, open the link above in Safari (iPhone) or Chrome (Android).
+3. Add it to your home screen: on iPhone, Share → Add to Home Screen; on Android, the menu → Install app
+   (or Add to Home screen). Open it from there from now on: on iPhone the installed app has its own
+   storage, separate from Safari, so videos imported in Safari do not show up in the app.
+4. Send yourself the `.s2s.json` (WhatsApp, AirDrop, Drive) and save it to your phone's files.
+5. In the app, tap "Import videos" and pick the file. That is all: it opens with airplane mode on,
+   keeps your progress (today's topic, streak, watched) on the phone and can hold one package per
+   course. Importing a package with the same title again replaces its videos and keeps your progress.
+
+The app asks the browser to keep its storage (so the phone does not clear it when it runs low on
+space) and shows how much it uses.
+
+**Alternative: MP4.** If you prefer plain video files, ask Claude to export them to MP4 (or run
+`s2s.py mp4 -t scroll-to-study`): each video becomes `scroll-to-study/mp4/t01.mp4`, …, which you can
+send to your phone and watch offline in Photos or WhatsApp, without progress tracking. It is optional
+and needs `playwright` (`pip install playwright`, then `playwright install chromium`) and
 [ffmpeg](https://ffmpeg.org); if they are missing, the command tells you how to install them.
 `s2s.py diagnostico` lists what is installed and what is missing.
 
@@ -121,7 +139,7 @@ which you can send to your phone and watch offline in Photos or WhatsApp. It is 
   it; that the quote actually *supports* the statement is Claude's own review, not a mechanical check.
   A wrong call there is possible, so in a project you confirm the doubtful ones and in a course they
   are dropped.
-- Tested in Chromium. Safari on iPhone needs more testing.
+- Tested in Chromium. Safari on iPhone (including the phone app) needs more testing.
 
 ## Development
 
@@ -136,12 +154,18 @@ calls the same code as `s2s.py mp4`).
 the animation follows the audio, that nothing important falls outside the TikTok/Reels/Shorts safe
 zones, and that the picture never stays still for more than a second (needs `playwright`).
 
+The phone app is in `web/`. `tools/sitio.py` builds the published site into `_site/` (it adds
+`progreso.js`, which only lives in `skills/scroll-to-study/scripts/`, and versions the service worker's
+cache); serve it with `python -m http.server -d _site 8000` to try it. `.github/workflows/pages.yml`
+publishes it to GitHub Pages on every push to `main` that touches it. Its tests
+(`tests/test_app_web.py`) need `playwright` with Chromium and are skipped without them.
+
 The tests use an invented project (`tests/fixtures/biblioteca`) and a silent voice, so they need
 neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (names are in Spanish):
 
 | File | What it does |
 |---|---|
-| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, respaldo, temas, pedido, guion, preguntas, video, videos, estado, mp4, diagnostico |
+| `s2s.py` | The command line Claude uses: instalar, corpus, verificar, respaldo, temas, pedido, guion, preguntas, video, videos, estado, mp4, paquete, diagnostico |
 | `fuentes.py` | Numbers the material and checks each statement against its quote |
 | `etapas.py` | Modes, languages and formats; builds the request for each script and its questions, and checks the questions |
 | `compile.py` | Validates the script and computes what the model does not decide (layout, pauses, pronunciation) |
@@ -149,6 +173,7 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 | `engine.py` + `engine.js` | Builds the animation (GSAP); looks come from `temas/` |
 | `reproductor.py` + `sonido.py` | Mixes the audio and outputs a `.html` that plays by itself |
 | `mp4.py` | Optional: exports a video `.html` to `.mp4` with Playwright and ffmpeg |
+| `paquete.py` | Puts every video in one `.s2s.json` for the phone app |
 | `diagnostico.py` | Checks Python, the packages, the voices, gsap and KaTeX, and says how to fix what is missing |
 
 ## License

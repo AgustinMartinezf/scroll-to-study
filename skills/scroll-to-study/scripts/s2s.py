@@ -16,6 +16,7 @@ comprobar con código y fabrica los videos:
   python3 s2s.py videos    -t T [--titulo ...]  # todos los guiones listos + T/videos/index.html
   python3 s2s.py estado    -t T
   python3 s2s.py mp4       -t T [--tema t01] [--alto 1280]   # opcional: T/videos/*.html -> T/mp4/*.mp4
+  python3 s2s.py paquete   -t T [--titulo ...]  # T/videos/*.html -> T/<titulo>.s2s.json, para la app del teléfono
   python3 s2s.py diagnostico                    # qué está instalado y qué falta, una línea por cosa
 
 Cada llamada queda en T/registro.jsonl (cuántos intentos y cuánto tiempo lleva cada etapa).
@@ -487,6 +488,30 @@ def cmd_mp4(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_paquete(a: argparse.Namespace) -> int:
+    """Junta los videos en un .s2s.json para importarlo en la app del teléfono (web/). No sube nada."""
+    import paquete
+    t = a.trabajo
+    idioma = idioma_de(t)
+    titulo = a.titulo or paquete.titulo_de_lista(t) or ("Para estudiar" if idioma == "es" else "Study playlist")
+    p, sin_video, sin_duracion = paquete.armar(t, titulo, idioma)
+    if not p["videos"]:
+        print(f"no hay videos en {t / 'videos'}: primero s2s.py videos -t {t}")
+        registrar(t, "paquete", error="sin videos", sin_video=sin_video)
+        return 1
+    destino = paquete.escribir(t, p)
+    peso = destino.stat().st_size
+    print(f"{len(p['videos'])} videos → {destino} ({paquete.tamano(peso)})")
+    if sin_video:
+        print(f"AVISO  temas sin video (no van en el paquete): {', '.join(sin_video)}")
+    if sin_duracion:
+        print(f"AVISO  sin timing.json, van con duración 0: {', '.join(sin_duracion)}")
+    print("Pasalo al teléfono (WhatsApp, AirDrop, Drive) e importalo en la app: "
+          "https://agustinmartinezf.github.io/scroll-to-study/")
+    registrar(t, "paquete", titulo=titulo, videos=len(p["videos"]), bytes=peso, sin_video=sin_video)
+    return 0
+
+
 def cmd_diagnostico(a: argparse.Namespace) -> int:
     import diagnostico
     return diagnostico.imprimir(diagnostico.revisar())
@@ -495,13 +520,13 @@ def cmd_diagnostico(a: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion", "preguntas",
-                                      "video", "videos", "estado", "mp4", "diagnostico"])
+                                      "video", "videos", "estado", "mp4", "paquete", "diagnostico"])
     ap.add_argument("-t", "--trabajo", type=Path)
     ap.add_argument("--repo", type=Path)
     ap.add_argument("--doc", type=Path, action="append", default=[])
     ap.add_argument("--tema")
     ap.add_argument("--voz", help="voz de Piper (por defecto davefx)")
-    ap.add_argument("--titulo", default="")
+    ap.add_argument("--titulo", default="", help="videos, paquete: nombre del proyecto o la materia")
     ap.add_argument("--estilo", choices=sorted(p.stem for p in (AQUI / "temas").glob("*.json")),
                     help="cómo se ve el video (por defecto, el que se eligió en corpus, o cuaderno)")
     ap.add_argument("--idioma", choices=sorted(IDIOMAS), default="es", help="corpus: idioma de los videos")
