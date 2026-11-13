@@ -39,3 +39,11 @@ def test_cargar_cortes_descarta_lo_que_no_entiende():
     r = correr(f"return [R.cargarCortes({json.dumps(texto)}), R.cargarCortes('no es json'), R.cargarCortes(null),"
                f" R.cargarCortes({{}})];")
     assert r == [[bueno, bueno], [], [], []]
+
+
+def test_cuenta_como_visto_desde_el_70_por_ciento():
+    r = correr("""return [R.MINIMO_VISTO, R.contarComoVisto(28, 40), R.contarComoVisto(27.9, 40),
+                          R.contarComoVisto(27.96, 40), R.contarComoVisto(0, 40),
+                          R.contarComoVisto(undefined, 40), R.contarComoVisto(10, undefined)];""")
+    # sin el dato (videos hechos antes) cuenta como siempre
+    assert r == [0.7, True, False, True, False, True, True]

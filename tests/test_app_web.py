@@ -355,3 +355,16 @@ def test_si_el_video_se_recarga_solo_la_app_lo_retoma_y_anota_el_corte(contexto,
     page.click("#exp")
     page.wait_for_function("window.copiado !== undefined")
     assert json.loads(page.evaluate("window.copiado"))["cortes"] == cortes
+
+
+def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete_v2())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    f = frame_del_video(page, "t01")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 42, duracion: 42, reproducidos: 12, video: 't01' } }, '*')")
+    page.wait_for_timeout(300)
+    assert page.query_selector(".s2s-quiz") is None and texto(page, "#nVistos") == "0 / 2"
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 42, duracion: 42, reproducidos: 30, video: 't01' } }, '*')")
+    page.wait_for_selector(".caja .s2s-quiz")
+    assert texto(page, "#nVistos") == "1 / 2"

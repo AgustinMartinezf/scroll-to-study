@@ -35,33 +35,71 @@ GSAP_TAG = '<script src="assets/gsap.min.js"></script>'
 
 PLAYER_CSS = """
 html, body { width:100% !important; height:100% !important; background:#000 !important; }
+html { touch-action:manipulation; }   /* sin zoom por doble toque: el doble toque salta 5 s */
 #root { position:fixed !important; left:0; top:0; transform-origin:0 0; }
 #s2s-tapa { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
   background:rgba(0,0,0,.45); z-index:99; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 #s2s-tapa[hidden] { display:none; }
 #s2s-tapa button { font:800 20px/1 Inter, sans-serif; color:#04170b; background:#1fbf6a; border:0;
   border-radius:999px; padding:18px 30px; pointer-events:none; }
-#s2s-barra { position:fixed; left:0; bottom:0; height:4px; width:0; background:#1fbf6a; z-index:98; }
+/* la barra se ve fina pero se agarra en 36 px de alto, por encima de la zona segura de abajo (la del
+   gesto de inicio del iPhone), y queda arriba de la tapa: se puede saltar antes del primer toque */
+#s2s-pista { position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom, 0px); height:36px; z-index:100;
+  cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent; }
+#s2s-pista::before { content:""; position:absolute; left:0; right:0; bottom:0; height:4px; background:rgba(255,255,255,.22); }
+#s2s-barra { position:absolute; left:0; bottom:0; height:4px; width:0; background:#1fbf6a; }
+#s2s-pista.arrastrando::before, #s2s-pista.arrastrando #s2s-barra { height:10px; }
+#s2s-salto { position:fixed; top:50%; left:50%; z-index:101; transform:translate(-50%, -50%); pointer-events:none;
+  font:800 22px/1 Inter, sans-serif; color:#fff; background:rgba(0,0,0,.6); border-radius:999px; padding:14px 20px;
+  opacity:0; transition:opacity .3s; }
+#s2s-salto.ver { opacity:1; transition:none; }
 """
 
 TEXTOS = {
     "es": {"tocar": "Tocar para ver", "seguir": "Seguir", "otraVez": "Ver de nuevo", "cargando": "Cargando…",
-           "error": "No se pudo reproducir", "sub": "Un video por día, en orden. Cada uno prepara una pregunta que te pueden hacer."},
+           "error": "No se pudo reproducir", "barra": "Posición del video",
+           "sub": "Un video por día, en orden. Cada uno prepara una pregunta que te pueden hacer."},
     "en": {"tocar": "Tap to play", "seguir": "Resume", "otraVez": "Watch again", "cargando": "Loading…",
-           "error": "Couldn't play", "sub": "One video a day, in order. Each one prepares a question you may get."},
+           "error": "Couldn't play", "barra": "Video position",
+           "sub": "One video a day, in order. Each one prepares a question you may get."},
 }
+
+
+def marcado(tx: dict) -> str:
+    """Los controles que se suman al video: la barra (que se arrastra), el aviso de ±5 s y la tapa."""
+    return (f'<div id="s2s-pista" role="slider" aria-label="{html.escape(tx["barra"])}" aria-valuemin="0">'
+            '<div id="s2s-barra"></div></div><div id="s2s-salto" aria-hidden="true"></div>'
+            f'<div id="s2s-tapa"><button>{html.escape(tx["tocar"])}</button></div>')
+
 
 PLAYER_JS = """
 (function () {
   // El audio se decodifica con Web Audio desde el propio archivo: no usa un elemento de audio ni URLs
   // data:, que algunos visores (vistas previas, apps) bloquean por su política de contenido.
-  const root = document.getElementById("root");
-  const tapa = document.getElementById("s2s-tapa"), boton = tapa.querySelector("button");
-  const barra = document.getElementById("s2s-barra");
+  const $ = id => document.getElementById(id);
+  const root = $("root"), tapa = $("s2s-tapa"), boton = tapa.querySelector("button");
+  const pista = $("s2s-pista"), barra = $("s2s-barra"), marca = $("s2s-salto");
   const tl = window.__timelines.main, D = tl.duration();
   const clips = [...document.querySelectorAll("#root .clip")].map(e => ({ e, s: +e.dataset.start, d: +e.dataset.duration }));
+  const SALTO = 5, DOBLE_MS = 250;
   let ctx = null, buffer = null, fuente = null, t0 = 0, pos = 0, sonando = false, silencio = null;
+  let empezado = false;      // ya sonó alguna vez (antes de eso, un salto también arranca)
+  let arrastre = null;       // el tiempo bajo el dedo mientras se arrastra la barra
+  let pendiente = null;      // el arranque en curso (decodificar puede tardar)
+  let tramo = null;          // desde dónde suena el tramo actual
+  const tramos = [];         // [desde, hasta] de lo que ya sonó
+  const acotar = t => Math.max(0, Math.min(D, t));
   const ahora = () => sonando ? Math.min(D, ctx.currentTime - t0) : pos;
+  // Segundos que sonaron de verdad, sin contar dos veces lo que se vio dos veces: la lista marca el
+  // video como visto (y pregunta) solo si llegan al 70 % de la duración.
+  function reproducidos() {
+    const ts = tramos.slice();
+    if (sonando && tramo !== null) ts.push([tramo, ahora()]);
+    ts.sort((a, b) => a[0] - b[0]);
+    let total = 0, hasta = 0;
+    for (const [a, b] of ts) { if (b > hasta) { total += b - Math.max(a, hasta); hasta = b; } }
+    return total;
+  }
   function desbloquearSilencio() {
     // Respaldo para iOS anterior a 17 (sin navigator.audioSession): un elemento Audio() en bucle usa
     // el canal "media", que suena con el teléfono en silencio, y arrastra a Web Audio con él. Todo en
@@ -74,8 +112,9 @@ PLAYER_JS = """
       if (pr && pr.catch) pr.catch(() => {});
     } catch (e) { silencio = null; }
   }
-  const avisar = (tipo) => {
-    const detalle = { tipo, t: +ahora().toFixed(2), video: document.title };
+  const avisar = (tipo, extra) => {
+    const detalle = Object.assign({ tipo, t: +ahora().toFixed(2), video: document.title, duracion: +D.toFixed(2),
+                                    reproducidos: +reproducidos().toFixed(2) }, extra);
     window.dispatchEvent(new CustomEvent("s2s", { detail: detalle }));
     if (window.parent !== window) window.parent.postMessage({ s2s: detalle }, "*");
   };
@@ -83,12 +122,15 @@ PLAYER_JS = """
     const k = Math.min(innerWidth / 1080, innerHeight / 1920);
     root.style.transform = `translate(${(innerWidth - 1080 * k) / 2}px, ${(innerHeight - 1920 * k) / 2}px) scale(${k})`;
   }
+  // El cuadro de t depende solo de t: da lo mismo llegar reproduciendo o saltando, para adelante o para atrás.
   function pintar(t) {
-    tl.seek(Math.min(t, D), false);
+    t = acotar(t);
+    tl.seek(t, false);
     for (const c of clips) c.e.style.visibility = (t >= c.s && t < c.s + c.d) ? "" : "hidden";
     barra.style.width = (100 * t / D) + "%";
+    pista.setAttribute("aria-valuenow", Math.round(t));
   }
-  function bucle() { pintar(ahora()); if (sonando) requestAnimationFrame(bucle); }
+  function bucle() { pintar(arrastre !== null ? arrastre : ahora()); if (sonando) requestAnimationFrame(bucle); }
   function decodificar() {
     const b64 = document.getElementById("s2s-mp3").textContent.trim();
     const bin = atob(b64), bytes = new Uint8Array(bin.length);
@@ -102,11 +144,20 @@ PLAYER_JS = """
     clearInterval(reloj); reloj = null;
     if (prendido) reloj = setInterval(() => { if (sonando) avisar("tiempo"); }, 2000);
   }
+  function cerrarTramo() { if (tramo !== null) { tramos.push([tramo, ahora()]); tramo = null; } }
+  // una fuente nueva que suena desde `desde` (una fuente de Web Audio no se puede mover: se cambia por otra)
+  function arrancarFuente(desde) {
+    desde = Math.min(acotar(desde), Math.max(0, D - 0.01));
+    const f = ctx.createBufferSource(); f.buffer = buffer; f.connect(ctx.destination);
+    f.onended = () => { if (f === fuente && sonando && ahora() >= D - 0.1) terminar(); };
+    fuente = f; t0 = ctx.currentTime - desde; f.start(0, desde); sonando = true; tramo = desde;
+  }
+  function frenarFuente() { const f = fuente; fuente = null; if (f) { try { f.stop(); } catch (e) {} } }
   function terminar() {
-    sonando = false; pos = D; pintar(D); marcarReloj(false);
+    cerrarTramo(); sonando = false; fuente = null; pos = D; pintar(D); marcarReloj(false);
     boton.textContent = TX.otraVez; tapa.hidden = false; avisar("fin");
   }
-  async function reproducir() {
+  async function empezar() {
     if (!ctx) {
       // iOS 17 o más: pedir la categoría "playback" hace sonar el audio con el teléfono en silencio
       // (iOS silencia Web Audio en modo silencio: bug 237322 de WebKit).
@@ -116,39 +167,112 @@ PLAYER_JS = """
     }
     if (ctx.state === "suspended") await ctx.resume();
     if (!buffer) { boton.textContent = TX.cargando; buffer = await decodificar(); }
-    if (sonando) return;   // la lista y un toque pueden pedirlo a la vez
+    if (sonando) return;
     if (pos >= D - 0.05) pos = 0;
-    fuente = ctx.createBufferSource(); fuente.buffer = buffer; fuente.connect(ctx.destination);
-    fuente.onended = () => { if (sonando && ahora() >= D - 0.1) terminar(); };
-    t0 = ctx.currentTime - pos; fuente.start(0, pos); sonando = true;
+    arrancarFuente(pos); empezado = true;
     tapa.hidden = true; avisar(pos < 0.1 ? "inicio" : "sigue"); marcarReloj(true); requestAnimationFrame(bucle);
   }
-  tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
+  // La lista, un toque y un salto pueden pedirlo a la vez: hay un solo arranque. Si quedó esperando un
+  // toque (el navegador dejó el AudioContext suspendido), este pedido puede traerlo: se reanuda acá mismo.
+  function reproducir() {
+    if (pendiente) { if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {}); return pendiente; }
+    pendiente = empezar().finally(() => { pendiente = null; });
+    return pendiente;
+  }
   function pausar() {
     if (!sonando) return;
-    pos = ahora(); sonando = false; try { fuente.stop(); } catch (e) {}
-    marcarReloj(false);
+    pos = ahora(); cerrarTramo(); sonando = false; frenarFuente(); marcarReloj(false);
     boton.textContent = TX.seguir; tapa.hidden = false; avisar("pausa");
   }
-  root.addEventListener("click", pausar);
-  // la lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un toque,
-  // queda la tapa) o pausar (su capa de gestos tapa el video mientras suena, así que el toque llega por acá).
-  // "play" con "desde" retoma un video que se recargó solo: aunque el navegador exija un toque, la tapa
-  // queda en "Seguir" en ese punto.
+  // Saltar: con audio sonando, se frena la fuente y arranca otra en el lugar nuevo. Quieto, se mueve el
+  // cuadro; si nunca sonó, arranca desde ahí.
+  function saltar(t) {
+    t = acotar(t);
+    if (sonando) { cerrarTramo(); frenarFuente(); arrancarFuente(t); pintar(t); }
+    else {
+      pos = t; pintar(t);
+      if (!empezado) reproducir().catch(() => {});
+      else boton.textContent = t >= D - 0.05 ? TX.otraVez : TX.seguir;
+    }
+    avisar("salto");
+  }
+  let mostrando = null;
+  function mostrarSalto(lado) {
+    marca.textContent = (lado > 0 ? "+" : "\\u2212") + SALTO + " s";
+    marca.style.left = lado > 0 ? "83%" : "17%";
+    marca.classList.add("ver");
+    clearTimeout(mostrando); mostrando = setTimeout(() => marca.classList.remove("ver"), 450);
+  }
+  function saltarPor(lado) { saltar(ahora() + SALTO * lado); mostrarSalto(lado); }
+  // Un toque pausa; dos toques seguidos en el tercio izquierdo o derecho saltan 5 s para atrás o para
+  // adelante. Para distinguirlos, la pausa espera DOBLE_MS por si llega el segundo toque; después de un
+  // doble toque, cada toque más del mismo lado vuelve a saltar.
+  let toque = null, racha = null;
+  function tocar(x) {          // x: de 0 (borde izquierdo) a 1 (borde derecho)
+    if (!sonando) { reproducir().catch(() => {}); return; }
+    const lado = x < 1 / 3 ? -1 : x > 2 / 3 ? 1 : 0, ya = performance.now();
+    if (racha && lado !== 0 && lado === racha.lado && ya < racha.hasta) {
+      if (toque) { clearTimeout(toque.reloj); toque = null; }
+      saltarPor(lado); racha.hasta = ya + 500; return;
+    }
+    racha = null;
+    if (toque) {
+      clearTimeout(toque.reloj); const primero = toque; toque = null;
+      if (lado !== 0 && lado === primero.lado) { saltarPor(lado); racha = { lado, hasta: ya + 500 }; }
+      else pausar();
+      return;
+    }
+    toque = { lado, reloj: setTimeout(() => { toque = null; pausar(); }, DOBLE_MS) };
+  }
+  root.addEventListener("click", e => tocar(e.clientX / innerWidth));
+  tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
+  // la barra: se arrastra, y mientras tanto se ve el cuadro de ese momento; al soltar, salta ahí
+  const tEn = e => acotar(D * e.clientX / innerWidth);
+  function soltar() { arrastre = null; pista.classList.remove("arrastrando"); }
+  pista.addEventListener("pointerdown", e => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    try { pista.setPointerCapture(e.pointerId); } catch (err) {}
+    arrastre = tEn(e); pista.classList.add("arrastrando"); pintar(arrastre);
+  });
+  pista.addEventListener("pointermove", e => { if (arrastre === null) return; arrastre = tEn(e); if (!sonando) pintar(arrastre); });
+  pista.addEventListener("pointerup", e => { if (arrastre === null) return; soltar(); saltar(tEn(e)); });
+  pista.addEventListener("pointercancel", () => { if (arrastre === null) return; soltar(); pintar(ahora()); });
+  // teclado: ← y → saltan 5 s, espacio pausa o sigue
+  function tecla(k) {
+    if (k === "ArrowLeft" || k === "ArrowRight") { saltarPor(k === "ArrowLeft" ? -1 : 1); return true; }
+    if (k === " " || k === "Spacebar") { if (sonando) pausar(); else reproducir().catch(() => {}); return true; }
+    return false;
+  }
+  addEventListener("keydown", e => {
+    if (e.altKey || e.ctrlKey || e.metaKey || (e.repeat && e.key === " ")) return;
+    if (tecla(e.key)) e.preventDefault();
+  });
+  // La lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un
+  // toque, queda la tapa) o pausar, o pasa un toque o una tecla que le llegó a ella. "play" con "desde"
+  // retoma un video que se recargó solo: aunque el navegador exija un toque, la tapa queda en "Seguir"
+  // en ese punto.
   addEventListener("message", e => {
-    if (!e.data) return;
-    if (e.data.s2s === "play" && !sonando) {
-      const desde = e.data.desde;
-      if (typeof desde === "number" && isFinite(desde) && desde > 0) {
-        pos = Math.min(desde, D); pintar(pos); boton.textContent = TX.seguir;
+    const m = e.data;
+    if (!m) return;
+    if (m.s2s === "play" && !sonando) {
+      if (typeof m.desde === "number" && isFinite(m.desde) && m.desde > 0) {
+        pos = acotar(m.desde); pintar(pos); boton.textContent = TX.seguir;
       }
       reproducir().catch(() => {});
     }
-    if (e.data.s2s === "pausa") pausar();
+    if (m.s2s === "pausa") pausar();
+    if (m.s2s === "toque" && typeof m.x === "number") tocar(m.x);
+    if (m.s2s === "tecla" && typeof m.tecla === "string") tecla(m.tecla);
   });
   addEventListener("resize", encajar);
+  pista.setAttribute("aria-valuemax", Math.round(D));
+  // Cada tween de gsap anota sus valores de partida la primera vez que se pinta; si eso pasara recién al
+  // reproducir o al saltar, el cuadro de t dependería del camino (dos tweens sobre lo mismo se pisan
+  // distinto). Se recorre la línea de tiempo entera una vez al cargar: desde acá el cuadro depende solo de t.
+  tl.progress(1, true).progress(0, true);
   encajar(); pintar(0);
-  window.__s2s = { pintar, D, ahora, reproducir };   // para pruebas
+  window.__s2s = { pintar, D, ahora, reproducir, saltar, tocar, reproducidos };   // para pruebas
   document.documentElement.dataset.s2sListo = "1";
   avisar("listo");
 })();
@@ -252,7 +376,7 @@ def construir(carpeta: Path, destino: Path, titulo: str = "") -> Path:
              "Promise.all([document.fonts.ready, cargarFuentes]).then(() => {\n" + m.group(1) + "\n" + m.group(2) + "\n" + player_js + "\n});")
     out = out[:m.start()] + (
         f'<script type="application/octet-stream" id="s2s-mp3">{mp3}</script>'
-        f'<div id="s2s-barra"></div><div id="s2s-tapa"><button>{tx["tocar"]}</button></div>'
+        + marcado(tx) +
         f"<script>{motor}</script>") + out[m.end():]
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(out, encoding="utf-8")
@@ -404,7 +528,7 @@ let ini = null, quiz = null;
 // lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
 const R = window.Reproduccion.conectar({
   iframe: v, claveCortes: () => "s2s-cortes:" + document.title,
-  alCambiar: () => ponerCapa(), alFin: () => terminoVideo(),
+  alCambiar: () => ponerCapa(), alFin: visto => { if (visto) terminoVideo(); },
 });
 const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
@@ -443,7 +567,7 @@ capa.addEventListener("pointerup", e => {
   if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
   else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
 });
-// cuando el video termina: queda visto y vienen sus preguntas, o el siguiente
+// cuando el video termina (y sonó al menos el 70 %): queda visto y vienen sus preguntas, o el siguiente
 function terminoVideo() {
   if (quiz) return;
   const cur = pos(st.cur), x = VIDEOS[cur];

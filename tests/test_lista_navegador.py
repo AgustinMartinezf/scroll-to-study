@@ -339,3 +339,29 @@ def test_cambiar_de_video_cierra_las_preguntas(navegador, tmp_path):
     page.click("#lista li:nth-child(3) button")
     video(page, "t03.html")
     assert page.query_selector(".s2s-quiz") is None and guardado(page)["repaso"] == {}
+
+
+def test_solo_cuenta_como_visto_si_sono_al_menos_el_70_por_ciento(navegador, tmp_path):
+    page = abrir(navegador, lista_con_preguntas(tmp_path))
+    f = video(page, "t01.html")
+    # sonó 20 de 40 s (se saltó al final): no queda visto, no hay preguntas, no pasa al siguiente
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 20 } }, '*')")
+    page.wait_for_timeout(300)
+    assert page.query_selector(".s2s-quiz") is None and texto(page, "#nVistos") == "0 / 3"
+    assert guardado(page)["dias"] == {} and page.evaluate("document.getElementById('v').src").endswith("t01.html")
+    # "Ver de nuevo" (en el video) y esta vez sonó 29 de 40: sí
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 40, reproducidos: 0 } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 29 } }, '*')")
+    page.wait_for_selector(".caja .s2s-quiz")
+    assert guardado(page)["dias"] == {"2026-11-12": ["t01"]}
+
+
+def test_lo_que_sono_antes_de_una_recarga_sigue_contando(navegador, lista):
+    page = abrir(navegador, lista)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 20, duracion: 40, reproducidos: 20 } }, '*')")
+    f.evaluate("location.reload()")
+    f.wait_for_function("window.recibidos && window.recibidos.some(m => m && m.s2s === 'play' && m.desde === 20)")
+    # el video recargado solo sabe de los últimos 10 s: con los 20 de antes son 30 de 40
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 10 } }, '*')")
+    page.wait_for_function("document.getElementById('nVistos').textContent === '1 / 3'")

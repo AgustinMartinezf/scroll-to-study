@@ -335,7 +335,7 @@
   // lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
   const R = window.Reproduccion.conectar({
     iframe: v, claveCortes: () => "s2s-cortes:" + actual.titulo, activo: () => !!actual,
-    alCambiar: () => ponerCapa(), alFin: () => terminoVideo(),
+    alCambiar: () => ponerCapa(), alFin: visto => { if (visto) terminoVideo(); },
   });
   const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 

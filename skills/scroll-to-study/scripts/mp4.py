@@ -124,7 +124,7 @@ async def _capturar(video: Path, ancho: int, alto: int, fps: int, escribir) -> i
                 await p.goto(video.resolve().as_uri())
                 await p.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=20000)
                 await p.evaluate("document.getElementById('s2s-tapa').hidden = true;"
-                                 "document.getElementById('s2s-barra').style.display = 'none'")
+                                 "document.getElementById('s2s-pista').style.display = 'none'")
                 pestanas.append(p)
             n = int(await pestanas[0].evaluate("__s2s.D") * fps)
 
