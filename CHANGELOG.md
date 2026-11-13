@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
+### Added
+
+- Seeking inside the video, in the playlist and in the phone app: drag the progress bar (it looks thin
+  but is easy to grab, and shows the frame under your finger while you drag), double tap the left or
+  right third of the video for -5 s / +5 s, or use the left and right arrow keys and space on a
+  computer. A single tap still pauses. Seeking before the first tap plays from there.
+- "Full screen" opens a feed: the video fills the screen, swipe up for the next one and down for the
+  previous one, and the X (or a swipe down from the top edge) goes back to the list. On a computer,
+  the up and down arrows or the mouse wheel change video and Esc leaves. The questions show there too.
+- "Export progress" includes "cortes": a log, kept only in that browser, of the times a video's page
+  reloaded by itself mid-video (date, video, second and browser), to diagnose it.
+
+### Changed
+
+- The playlist no longer changes video when you swipe on the player: the page scrolls normally to the
+  list, and swiping between videos is in the full screen feed.
+- A video counts as watched, and its questions show, only if at least 70 % of it actually played. If
+  not, it stays at the end with "Watch again".
+- Videos made by an earlier version keep their old player: remake them with
+  `s2s.py videos --todo -t scroll-to-study` (and the phone package with `s2s.py paquete`) to get the new
+  controls and the fix below.
+
+### Fixed
+
+- On iPhone, videos stopped halfway and started again from the beginning. The likely cause is the
+  blur animated on every camera move between scenes, which makes iOS reserve huge layers and drop the
+  video's page; videos no longer animate any blur (the camera move fades instead), and if the page
+  still reloads, the video resumes where it was instead of at 0.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added
@@ -71,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AgustinMartinezf/scroll-to-study/releases/tag/v0.1.0
