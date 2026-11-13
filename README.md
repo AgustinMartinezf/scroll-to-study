@@ -61,8 +61,26 @@ You need [Claude Code](https://code.claude.com) and Python 3.10 or newer. In Cla
 ```
 
 (From a terminal it is `claude plugin marketplace add AgustinMartinezf/scroll-to-study` and
-`claude plugin install scroll-to-study@scroll-to-study`.) To get a newer version later:
-`/plugin marketplace update scroll-to-study`.
+`claude plugin install scroll-to-study@scroll-to-study`.)
+
+### Update
+
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
+
+**In Claude Code:**
+
+```
+/plugin marketplace update scroll-to-study
+/plugin update scroll-to-study@scroll-to-study
+/reload-plugins
+```
+
+The first command fetches the list of versions, the second installs the new one and the third loads
+it without restarting. Automatic updates are off by default for third-party marketplaces like this
+one, so the plugin does not update by itself until you run these commands (or turn auto-update on for
+this marketplace in `/plugin`).
+
+**In the Claude app:** Plugins → Scroll to study → Update.
 
 The first time you use it, Claude installs the Python dependencies (`numpy`, `soundfile`, `piper-tts`,
 `onnx`, `pypdf`, `python-pptx`, `python-docx`) and downloads the voice for your language (~65 MB),
