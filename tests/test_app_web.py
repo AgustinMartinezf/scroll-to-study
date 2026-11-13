@@ -368,3 +368,38 @@ def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
     f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 42, duracion: 42, reproducidos: 30, video: 't01' } }, '*')")
     page.wait_for_selector(".caja .s2s-quiz")
     assert texto(page, "#nVistos") == "1 / 2"
+
+
+def test_la_app_tiene_los_dos_modos(contexto, sitio_url):
+    """Modo normal: arrastrar sobre el video no cambia de video. Feed: sí, y la X vuelve a la lista."""
+    ctx = contexto(has_touch=True, is_mobile=True)
+    page = abrir_el_dia(ctx, sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    f = frame_del_video(page, "t01")
+    assert texto(page, "#feed") == "Pantalla completa"
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 42, reproducidos: 0, video: 't01' } }, '*')")
+    caja = page.query_selector(".caja").bounding_box()
+    x, y = caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2
+    arrastrar(page, x, y + 120, y - 120)
+    page.wait_for_timeout(500)
+    assert frame_del_video(page, "t01") and page.query_selector(".s2s-capa.activa") is None
+
+    page.click("#feed")
+    caja = page.query_selector(".caja").bounding_box()
+    assert (caja["x"], caja["y"], caja["width"], caja["height"]) == (0, 0, 390, 844)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 42, reproducidos: 0, video: 't01' } }, '*')")
+    page.wait_for_selector(".s2s-capa.activa")
+    arrastrar(page, 195, 600, 250)
+    frame_del_video(page, "t02")
+    page.click(".s2s-salir")
+    assert not page.evaluate("document.querySelector('.caja').classList.contains('s2s-feed')")
+
+
+def arrastrar(page, x, y0, y1, pasos=6):
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y0}]})
+    for k in range(1, pasos + 1):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * k / pasos}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.detach()

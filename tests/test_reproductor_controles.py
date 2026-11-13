@@ -281,3 +281,27 @@ def test_pintar_da_el_mismo_cuadro_llegue_como_llegue(navegador, video_real):
         finally:
             directo.close()
     ida.close()
+
+
+def test_en_el_modo_feed_un_gesto_sobre_la_tapa_se_le_avisa_a_la_lista(abrir):
+    """Con el video quieto la lista no pone su capa (el toque que arranca el audio tiene que ser del video):
+    es el video el que avisa el gesto. Fuera del modo feed, la tapa no toma gestos (la página scrollea)."""
+    page = abrir()
+    assert page.evaluate("getComputedStyle(document.getElementById('s2s-tapa')).touchAction") == "auto"
+    page.evaluate("postMessage({ s2s: 'feed', activo: true }, '*')")
+    page.wait_for_function("getComputedStyle(document.getElementById('s2s-tapa')).touchAction === 'none'")
+    page.mouse.move(195, 600)
+    page.mouse.down()
+    page.mouse.move(195, 300, steps=3)
+    page.mouse.up()
+    d = esperar_aviso(page, "deslizar")
+    assert d["dy"] == pytest.approx(-300, abs=2) and d["y0"] == pytest.approx(600, abs=2) and d["ms"] >= 0
+    page.wait_for_timeout(100)
+    assert avisos(page, "inicio") == [] and not page.evaluate("document.getElementById('s2s-tapa').hidden")
+    page.keyboard.press("ArrowDown")                                       # ↓ y Esc son de la lista
+    page.keyboard.press("Escape")
+    assert [a["tecla"] for a in avisos(page, "tecla")] == ["ArrowDown", "Escape"]
+    page.mouse.wheel(0, 100)
+    assert esperar_aviso(page, "rueda")["dy"] == 100
+    page.mouse.click(195, 400)                                             # un toque sigue reproduciendo
+    esperar_aviso(page, "inicio")

@@ -97,7 +97,7 @@
   const QX = C.textos(IDIOMA);
 
   const $ = id => document.getElementById(id);
-  const v = $("v"), capa = $("capa");
+  const v = $("v");
   for (const id of ["importar", "vTitulo", "vTexto", "vPrivado", "iTitulo", "iPaso1", "iPaso2", "iPaso3",
                     "iSeparado", "importarIgual", "sub", "ant", "sig", "cero"]) $(id).textContent = TX[id];
   $("borrarPaq").textContent = TX.borrar; $("exp").textContent = TX.exportar;
@@ -329,15 +329,16 @@
     $("ant").disabled = cur === 0; $("sig").disabled = cur === VIDEOS.length - 1;
   }
 
-  // capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
-  const tactil = (window.matchMedia && matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0;
-  let ini = null, urlActual = null, turno = 0, quiz = null;
-  // lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
+  let urlActual = null, turno = 0, quiz = null;
+  // lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes) y los dos modos: el
+  // normal, sin gestos sobre el video, y "Pantalla completa" (feed), donde se desliza entre videos:
+  // reproduccion.js, igual que en la lista de la compu
   const R = window.Reproduccion.conectar({
-    iframe: v, claveCortes: () => "s2s-cortes:" + actual.titulo, activo: () => !!actual,
-    alCambiar: () => ponerCapa(), alFin: visto => { if (visto) terminoVideo(); },
+    iframe: v, caja: document.querySelector(".caja"), botonFeed: $("feed"), idioma: IDIOMA,
+    claveCortes: () => "s2s-cortes:" + actual.titulo, activo: () => !!actual,
+    hay: d => pos(st.cur) + d >= 0 && pos(st.cur) + d < VIDEOS.length, mover: d => abrir(pos(st.cur) + d, true),
+    alFin: visto => { if (visto) terminoVideo(); },
   });
-  const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 
   function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
   function seguirConLoQueToca() {
@@ -384,17 +385,6 @@
     urlActual = url;
   }
 
-  capa.addEventListener("pointerdown", e => {
-    ini = { x: e.clientX, y: e.clientY };
-    try { capa.setPointerCapture(e.pointerId); } catch (err) {}
-  });
-  capa.addEventListener("pointercancel", () => { ini = null; });
-  capa.addEventListener("pointerup", e => {
-    if (!ini) return;
-    const dx = e.clientX - ini.x, dy = e.clientY - ini.y; ini = null;
-    if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
-    else if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && v.contentWindow) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
-  });
   // el video avisa con postMessage cuándo está listo, suena, se pausa y termina (reproduccion.js solo le
   // cree al iframe del reproductor: el origen es opaco por el sandbox, así que se compara la ventana)
   function terminoVideo() {

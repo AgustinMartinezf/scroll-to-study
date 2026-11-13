@@ -47,3 +47,10 @@ def test_cuenta_como_visto_desde_el_70_por_ciento():
                           R.contarComoVisto(undefined, 40), R.contarComoVisto(10, undefined)];""")
     # sin el dato (videos hechos antes) cuenta como siempre
     assert r == [0.7, True, False, True, False, True, True]
+
+
+def test_gesto_umbral_de_80_px_y_velocidad_minima():
+    r = correr("""return [R.UMBRAL, R.gesto(3, -5, 90), R.gesto(0, -120, 100), R.gesto(4, 200, 150),
+                          R.gesto(0, -79, 50), R.gesto(0, -200, 2000), R.gesto(150, -100, 80), R.gesto(30, 0, 50)];""")
+    # toque; arriba = siguiente; abajo = anterior; corto; lento; de costado; ni toque ni gesto
+    assert r == [80, "toque", "siguiente", "anterior", None, None, None, None]

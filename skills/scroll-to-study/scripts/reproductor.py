@@ -50,7 +50,7 @@ html { touch-action:manipulation; }   /* sin zoom por doble toque: el doble toqu
 #s2s-barra { position:absolute; left:0; bottom:0; height:4px; width:0; background:#1fbf6a; }
 #s2s-pista.arrastrando::before, #s2s-pista.arrastrando #s2s-barra { height:10px; }
 #s2s-salto { position:fixed; top:50%; left:50%; z-index:101; transform:translate(-50%, -50%); pointer-events:none;
-  font:800 22px/1 Inter, sans-serif; color:#fff; background:rgba(0,0,0,.6); border-radius:999px; padding:14px 20px;
+  font:800 22px/1 Inter, sans-serif; white-space:nowrap; color:#fff; background:rgba(0,0,0,.6); border-radius:999px; padding:14px 20px;
   opacity:0; transition:opacity .3s; }
 #s2s-salto.ver { opacity:1; transition:none; }
 """
@@ -225,7 +225,24 @@ PLAYER_JS = """
     toque = { lado, reloj: setTimeout(() => { toque = null; pausar(); }, DOBLE_MS) };
   }
   root.addEventListener("click", e => tocar(e.clientX / innerWidth));
-  tapa.addEventListener("click", () => reproducir().catch(err => { boton.textContent = TX.error; console.error(err); }));
+  // En el modo feed de la lista, con el video quieto, la tapa es lo que recibe el dedo: un gesto sobre ella
+  // se le avisa a la lista (que decide si es cambiar de video o salir) en vez de reproducir.
+  let feed = false, gestoIni = null, fueGesto = false;   // fueGesto: el click que sigue a ese gesto no reproduce
+  tapa.addEventListener("pointerdown", e => { fueGesto = false; gestoIni = feed ? { x: e.clientX, y: e.clientY, t: e.timeStamp } : null; });
+  tapa.addEventListener("pointercancel", () => { gestoIni = null; });
+  tapa.addEventListener("pointerup", e => {
+    const a = gestoIni; gestoIni = null;
+    if (!a || !feed) return;
+    const dx = e.clientX - a.x, dy = e.clientY - a.y;
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+    fueGesto = true;
+    avisar("deslizar", { dx, dy, ms: e.timeStamp - a.t, y0: a.y });
+  });
+  tapa.addEventListener("click", () => {
+    if (fueGesto) { fueGesto = false; return; }
+    reproducir().catch(err => { boton.textContent = TX.error; console.error(err); });
+  });
+  addEventListener("wheel", e => { if (feed) { e.preventDefault(); avisar("rueda", { dy: e.deltaY }); } }, { passive: false });
   // la barra: se arrastra, y mientras tanto se ve el cuadro de ese momento; al soltar, salta ahí
   const tEn = e => acotar(D * e.clientX / innerWidth);
   function soltar() { arrastre = null; pista.classList.remove("arrastrando"); }
@@ -246,7 +263,12 @@ PLAYER_JS = """
   }
   addEventListener("keydown", e => {
     if (e.altKey || e.ctrlKey || e.metaKey || (e.repeat && e.key === " ")) return;
-    if (tecla(e.key)) e.preventDefault();
+    if (tecla(e.key)) { e.preventDefault(); return; }
+    // ↑, ↓ y Esc son de la lista (cambiar de video y salir del modo feed): se le pasan
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Escape"].includes(e.key)) {
+      if (feed) e.preventDefault();
+      avisar("tecla", { tecla: e.key });
+    }
   });
   // La lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un
   // toque, queda la tapa) o pausar, o pasa un toque o una tecla que le llegó a ella. "play" con "desde"
@@ -264,6 +286,7 @@ PLAYER_JS = """
     if (m.s2s === "pausa") pausar();
     if (m.s2s === "toque" && typeof m.x === "number") tocar(m.x);
     if (m.s2s === "tecla" && typeof m.tecla === "string") tecla(m.tecla);
+    if (m.s2s === "feed") { feed = !!m.activo; tapa.style.touchAction = feed ? "none" : ""; }
   });
   addEventListener("resize", encajar);
   pista.setAttribute("aria-valuemax", Math.round(D));
@@ -408,10 +431,6 @@ h1 { font:800 clamp(24px,5vw,36px)/1.1 system-ui, sans-serif; margin:0; letter-s
 .caja { position:relative; width:100%; max-width:400px; aspect-ratio:9/16; margin:0 auto; border-radius:18px; overflow:hidden;
   background:#000; border:1px solid var(--line); }
 .caja iframe { width:100%; height:100%; border:0; display:block; }
-/* capa de gestos: solo tapa el video mientras suena en una pantalla táctil; con la tapa del video a la vista
-   ("Tocar para ver", "Seguir") no está, así el toque llega al video y el navegador lo cuenta como gesto */
-#capa { position:absolute; inset:0; display:none; touch-action:none; }
-#capa.activa { display:block; }
 .ahora small { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
 .ahora span { font-weight:700; font-size:17px; }
 .ctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
@@ -454,11 +473,12 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
   </header>
   <div class="barra" aria-hidden="true"><i id="lleno"></i></div>
   <section class="player">
-    <div class="caja"><iframe id="v" allow="autoplay" title="video"></iframe><div id="capa"></div></div>
+    <div class="caja"><iframe id="v" allow="autoplay" title="video"></iframe></div>
     <div class="ahora"><small id="nAhora"></small><span id="tAhora"></span></div>
     <div class="ctrls">
       <button id="ant" type="button"></button>
       <button id="sig" type="button" class="prim"></button>
+      <button id="feed" type="button"></button>
     </div>
     <div class="ctrls" id="ctrls2">
       <button id="exp" type="button"></button>
@@ -482,7 +502,7 @@ let st = P.vacio(VIDEOS);
 try { st = P.cargar(localStorage.getItem(CLAVE), VIDEOS); } catch (e) {}
 const guardar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(st)); } catch (e) {} };
 guardar();   // deja guardado el formato nuevo si venía del viejo
-const $ = id => document.getElementById(id), v = $("v"), capa = $("capa");
+const $ = id => document.getElementById(id), v = $("v");
 const pos = id => Math.max(0, VIDEOS.findIndex(x => x.id === id));
 const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 $("ant").textContent = TX.ant; $("sig").textContent = TX.sig; $("cero").textContent = TX.cero;
@@ -522,15 +542,15 @@ function pintar() {
   $("tAhora").textContent = VIDEOS[cur].titulo;
   $("ant").disabled = cur === 0; $("sig").disabled = cur === VIDEOS.length - 1;
 }
-// capa de gestos (pantallas táctiles): deslizar arriba = siguiente, abajo = anterior, tocar = pausa
-const tactil = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-let ini = null, quiz = null;
-// lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes): reproduccion.js
+let quiz = null;
+// lo que pasa con el iframe del video (avisos, retomar si se recarga solo, cortes) y los dos modos: el normal,
+// sin gestos sobre el video, y "Pantalla completa" (feed), donde se desliza entre videos: reproduccion.js
 const R = window.Reproduccion.conectar({
-  iframe: v, claveCortes: () => "s2s-cortes:" + document.title,
-  alCambiar: () => ponerCapa(), alFin: visto => { if (visto) terminoVideo(); },
+  iframe: v, caja: document.querySelector(".caja"), botonFeed: $("feed"), idioma: IDIOMA,
+  claveCortes: () => "s2s-cortes:" + document.title,
+  hay: d => pos(st.cur) + d >= 0 && pos(st.cur) + d < VIDEOS.length, mover: d => abrir(pos(st.cur) + d, true),
+  alFin: visto => { if (visto) terminoVideo(); },
 });
-const ponerCapa = () => capa.classList.toggle("activa", tactil && R.sonando());
 function cerrarQuiz() { if (quiz) { quiz.cerrar(); quiz = null; } }
 function seguirConLoQueToca() {
   const t = P.queTocaHoy(st, VIDEOS, hoy());
@@ -556,17 +576,6 @@ function abrir(i, auto) {
   st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
   R.cargar(VIDEOS[i].id, auto); v.src = VIDEOS[i].archivo; pintar();
 }
-capa.addEventListener("pointerdown", e => {
-  ini = { x: e.clientX, y: e.clientY };
-  try { capa.setPointerCapture(e.pointerId); } catch (err) {}
-});
-capa.addEventListener("pointercancel", () => { ini = null; });
-capa.addEventListener("pointerup", e => {
-  if (!ini) return;
-  const dx = e.clientX - ini.x, dy = e.clientY - ini.y; ini = null;
-  if (Math.abs(dy) > 50 && Math.abs(dy) > 1.5 * Math.abs(dx)) abrir(pos(st.cur) + (dy < 0 ? 1 : -1), true);
-  else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) v.contentWindow.postMessage({ s2s: "pausa" }, "*");
-});
 // cuando el video termina (y sonó al menos el 70 %): queda visto y vienen sus preguntas, o el siguiente
 function terminoVideo() {
   if (quiz) return;
