@@ -67,3 +67,18 @@ def test_toque_arranca_sin_errores(tmp_path, navegador, ios):
     if ios:                                                    # iOS 17+: se pidió la categoría playback
         assert page.evaluate("navigator.audioSession.type") == "playback"
     page.close()
+
+
+def test_la_lista_puede_pausar_con_un_mensaje(tmp_path, navegador):
+    """La capa de gestos de la lista tapa el video mientras suena: el toque llega como postMessage "pausa"."""
+    page = navegador.new_page()
+    archivo = tmp_path / "player_pausa.html"
+    archivo.write_text(_pagina(False), encoding="utf-8")
+    page.goto(archivo.resolve().as_uri())
+    page.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=20000)
+    page.click("#s2s-tapa")
+    page.wait_for_function("document.getElementById('s2s-tapa').hidden === true", timeout=8000)
+    page.evaluate("window.postMessage({ s2s: 'pausa' }, '*')")
+    page.wait_for_function("document.getElementById('s2s-tapa').hidden === false", timeout=8000)
+    assert page.text_content("#s2s-tapa button") == reproductor.TEXTOS["es"]["seguir"]
+    page.close()

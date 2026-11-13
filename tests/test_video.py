@@ -43,7 +43,21 @@ def test_indice(tmp_path):
                            [{"archivo": "t01.html", "titulo": "La FK de multa", "pregunta": "¿Por qué?", "duracion": 48.2}])
     s = p.read_text(encoding="utf-8")
     assert '"archivo": "t01.html"' in s and '"duracion": 48.2' in s and "<title>Biblioteca &lt;ejemplo&gt;</title>" in s
-    assert "vistos hoy" in s and "localStorage" in s
+    assert '"id": "t01"' in s                                   # sin id, el nombre del archivo
+    assert "Hoy toca" in s and "Borrar progreso" in s and "Exportar progreso" in s and "localStorage" in s
+    assert "window.Progreso" in s or "raiz.Progreso" in s        # progreso.js va embebido
+    assert s.lower().count("</script") == s.lower().count("<script")
+
+
+def test_indice_con_ids_y_en_ingles(tmp_path):
+    videos = [{"id": "t07", "archivo": "t07.html", "titulo": "__TX__ </script>", "duracion": 30},
+              {"id": "t02", "archivo": "t02.html", "titulo": "B", "duracion": 40}]
+    s = reproductor.indice(tmp_path / "index.html", "Course", videos, "en").read_text(encoding="utf-8")
+    assert '"id": "t07"' in s and '"id": "t02"' in s
+    assert "Up today" in s and "Clear progress" in s and "Export progress" in s
+    assert '"titulo": "__TX__ <\\/script>"' in s                 # una sola pasada, y sin cerrar el <script>
+    with pytest.raises(ValueError):
+        reproductor.indice(tmp_path / "x.html", "C", [videos[0], dict(videos[1], id="t07")])
 
 
 def test_mezcla_no_satura():

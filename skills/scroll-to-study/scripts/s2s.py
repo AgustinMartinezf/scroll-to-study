@@ -417,7 +417,7 @@ def cmd_videos(a: argparse.Namespace) -> int:
             continue
         if a.todo or not html.exists() or html.stat().st_mtime < (c / "spec.json").stat().st_mtime:
             hacer_video(t, x["id"], a.voz, a.estilo)
-        lista.append({"archivo": html.name, "titulo": x["titulo"], "pregunta": x.get("pregunta", ""),
+        lista.append({"id": x["id"], "archivo": html.name, "titulo": x["titulo"], "pregunta": x.get("pregunta", ""),
                       "duracion": leer(c / "timing.json")["duration"]})
     if not lista:
         print("no hay videos para armar"); return 1
