@@ -148,8 +148,11 @@ For each topic, in order:
    `S2S preguntas -t T --tema t01` again to validate it. Same fixing loop as the script: fix everything
    marked `ARREGLAR`, also treat as errors the `AVISO` lines about identifiers or numbers that are not in
    the sources, note `PREGUNTAR` for the person, and if it says not to continue, move on.
-   The questions stay in `T/t01/preguntas.json`: they do not show up in the video or the playlist yet,
-   so do not tell the person they will see them. `S2S estado -t T` says which topics have them validated.
+   Once validated, the questions are shown right after the video, in the playlist and in the phone app
+   (not inside the video `.html`): one by one, with the explanation after each answer. The result decides
+   when the topic comes back for review (step 6). Only questions validated without errors and not edited
+   since are shown: if you change `preguntas.json`, validate it again. `S2S estado -t T` says which topics
+   have them validated.
 
 If there are many topics, do 3 or 4 at a time and ask whether to continue. When done, gather all
 `PREGUNTAR` and `[COMPROBAR]` notes and resolve them with the person: they know whether the fact is
@@ -160,15 +163,20 @@ true. With their answer, fix the script or the questions (or the sources) and va
     S2S videos -t T --titulo "<name of the project or course>"
 
 It generates the voice and the animation of every finished script (a few seconds per video) and a
-playlist at `T/videos/index.html`. Each video is a single `.html` of about 1 MB that works offline:
+playlist at `T/videos/index.html`. It warns about the topics that go without questions (no
+`preguntas.json`, not validated, edited after validating, or with errors): those topics still get their
+video. If a warning says a file was not validated or has errors, run `S2S preguntas` for that topic, fix
+it, and run `S2S videos` again (it does not redo the videos, only the playlist). Each video is a single `.html` of about 1 MB that works offline:
 it can be opened on the computer or copied to a phone. To redo one after changing its script:
 `S2S video -t T --tema t01`. `S2S estado -t T` shows what is missing.
 If `video` warns that something appears right before the camera changes scene, move that `{show}`
 earlier in the script or add a short sentence after it, validate again and redo that video.
 
 When done, say in two or three lines how many videos were made, which were not and why, and where to
-open the playlist. Suggest watching one a day, in order, and offer `S2S paquete` (step 7) if they want
-the videos on their phone.
+open the playlist. Explain how the playlist works: it opens what is up today; after a video with
+questions it asks them, and a topic with a wrong answer comes back tomorrow, while one answered all
+right comes back in 3 days, then in 7. They can skip the questions (the topic counts as watched) and
+watch any video at any time. Offer `S2S paquete` (step 7) if they want the videos on their phone.
 
 ## 7. On the phone (optional)
 
@@ -177,8 +185,9 @@ If the person wants the videos on their phone, offer the phone app first:
 
     S2S paquete -t T [--titulo "<name>"]   # every video in T/videos/ -> T/<title>.s2s.json
 
-The title defaults to the playlist's. It prints the file's size and the topics that have no video
-yet (they are not in the package). Then tell them, in their language:
+The title defaults to the playlist's. It prints the file's size, the topics that have no video
+yet (they are not in the package) and the ones that go without questions, with the same warnings as
+`videos`. The questions travel in the package and work in the app exactly as in the playlist. Then tell them, in their language:
 1. Open https://agustinmartinezf.github.io/scroll-to-study/ on the phone, in Safari (iPhone) or Chrome
    (Android), and add it to the home screen (iPhone: Share → Add to Home Screen). Open it from the
    home screen from then on: on iPhone the installed app keeps its own storage, separate from Safari.

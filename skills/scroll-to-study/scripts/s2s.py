@@ -43,7 +43,7 @@ import fuentes                                      # noqa: E402
 from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
 from etapas import (IDIOMAS, MODOS, aplicar_respaldo, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
-                    leer, modo_de, textos,
+                    huella, leer, modo_de, preguntas_listas, textos,
                     pedido_guion, pedido_preguntas, pedido_respaldo, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
                     resumen_inventario, separar_errores)
 
@@ -317,10 +317,6 @@ def cmd_guion(a: argparse.Namespace) -> int:
     return 0 if not errores else 1
 
 
-def _huella(p: Path) -> str:
-    return hashlib.sha256(p.read_bytes()).hexdigest()
-
-
 def cmd_preguntas(a: argparse.Namespace) -> int:
     """En dos tiempos, como pedido y guion: sin preguntas.json imprime el pedido; con él, lo valida."""
     t, carpeta = a.trabajo, a.trabajo / a.tema
@@ -343,12 +339,13 @@ def cmd_preguntas(a: argparse.Namespace) -> int:
         errores, avisos = [f"el JSON no se pudo leer: {e}"], []
     arreglar, preguntar = separar_errores(errores)
     # la huella dice qué versión de preguntas.json se validó: si cambia después, estado lo nota
-    escribir(reporte, {"errores": errores, "avisos": avisos, "intentos": intento, "huella": _huella(archivo)})
+    escribir(reporte, {"errores": errores, "avisos": avisos, "intentos": intento, "huella": huella(archivo)})
     for m in avisos: print("AVISO     ", m)
     for m in arreglar: print("ARREGLAR  ", m)
     for m in preguntar: print("PREGUNTAR ", m)
     if not errores:
-        print(f"ok en el intento {intento}: preguntas validadas en {archivo} (todavía no salen en el video)")
+        print(f"ok en el intento {intento}: preguntas validadas en {archivo} (salen después del video, "
+              "en la lista y en la app, cuando corras s2s.py videos o s2s.py paquete)")
     elif arreglar and intento >= MAX_INTENTOS:
         print(f"\nYa van {intento} intentos: no sigas corrigiendo estas preguntas; contale a la persona y pasá al siguiente.")
     registrar(t, "preguntas", tema=a.tema, fase="validar", intento=intento, errores=len(arreglar),
@@ -361,11 +358,28 @@ def estado_preguntas(carpeta: Path) -> str:
     if not archivo.exists():
         return "sin preguntas"
     rep = leer(reporte) if reporte.exists() else {}
-    if rep.get("huella") != _huella(archivo):
+    if rep.get("huella") != huella(archivo):
         return "preguntas sin validar"
     if rep["errores"]:
         return f"preguntas con {len(rep['errores'])} errores"
     return "preguntas validadas" + (f" ({len(rep['avisos'])} avisos)" if rep["avisos"] else "")
+
+
+def avisar_sin_preguntas(t: Path, faltan: dict[str, str]) -> None:
+    """faltan: {tema: motivo de preguntas_listas}. Los temas van igual, pero sin preguntas."""
+    sin = [x for x, m in faltan.items() if m == "sin_archivo"]
+    if sin:
+        print(f"AVISO  temas sin preguntas (van sin preguntas): {', '.join(sin)}")
+    for x, m in faltan.items():
+        if m == "sin_validar":
+            print(f"AVISO  {x}: preguntas.json no se validó o cambió después de validarlo; va sin preguntas "
+                  f"(corré s2s.py preguntas -t {t} --tema {x})")
+        elif m == "con_errores":
+            print(f"AVISO  {x}: preguntas.json tiene errores; va sin preguntas (corré s2s.py preguntas -t {t} --tema {x})")
+
+
+def _inventario(t: Path) -> dict[str, Any] | None:
+    return leer(t / "inventario.json") if (t / "inventario.json").exists() else None
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +424,7 @@ def cmd_video(a: argparse.Namespace) -> int:
 def cmd_videos(a: argparse.Namespace) -> int:
     import reproductor
     t = a.trabajo
-    lista = []
+    lista, faltan, inv = [], {}, _inventario(t)
     for x in leer(t / "temas.json")["temas"]:
         c, html = t / x["id"], t / "videos" / f"{x['id']}.html"
         if not (c / "spec.json").exists():
@@ -418,10 +432,14 @@ def cmd_videos(a: argparse.Namespace) -> int:
             continue
         if a.todo or not html.exists() or html.stat().st_mtime < (c / "spec.json").stat().st_mtime:
             hacer_video(t, x["id"], a.voz, a.estilo)
+        preguntas, motivo = preguntas_listas(c, inv)
+        if motivo:
+            faltan[x["id"]] = motivo
         lista.append({"id": x["id"], "archivo": html.name, "titulo": x["titulo"], "pregunta": x.get("pregunta", ""),
-                      "duracion": leer(c / "timing.json")["duration"]})
+                      "duracion": leer(c / "timing.json")["duration"], "preguntas": preguntas})
     if not lista:
         print("no hay videos para armar"); return 1
+    avisar_sin_preguntas(t, faltan)
     titulo = a.titulo or ("Para estudiar" if idioma_de(t) == "es" else "Study playlist")
     idx = reproductor.indice(t / "videos" / "index.html", titulo, lista, idioma_de(t))
     print(f"{len(lista)} videos → abrí {idx}")
@@ -494,7 +512,7 @@ def cmd_paquete(a: argparse.Namespace) -> int:
     t = a.trabajo
     idioma = idioma_de(t)
     titulo = a.titulo or paquete.titulo_de_lista(t) or ("Para estudiar" if idioma == "es" else "Study playlist")
-    p, sin_video, sin_duracion = paquete.armar(t, titulo, idioma)
+    p, sin_video, sin_duracion, sin_preguntas = paquete.armar(t, titulo, idioma, inv=_inventario(t))
     if not p["videos"]:
         print(f"no hay videos en {t / 'videos'}: primero s2s.py videos -t {t}")
         registrar(t, "paquete", error="sin videos", sin_video=sin_video)
@@ -506,9 +524,11 @@ def cmd_paquete(a: argparse.Namespace) -> int:
         print(f"AVISO  temas sin video (no van en el paquete): {', '.join(sin_video)}")
     if sin_duracion:
         print(f"AVISO  sin timing.json, van con duración 0: {', '.join(sin_duracion)}")
+    avisar_sin_preguntas(t, sin_preguntas)
     print("Pasalo al teléfono (WhatsApp, AirDrop, Drive) e importalo en la app: "
           "https://agustinmartinezf.github.io/scroll-to-study/")
-    registrar(t, "paquete", titulo=titulo, videos=len(p["videos"]), bytes=peso, sin_video=sin_video)
+    registrar(t, "paquete", titulo=titulo, videos=len(p["videos"]), bytes=peso, sin_video=sin_video,
+              sin_preguntas=sorted(sin_preguntas))
     return 0
 
 

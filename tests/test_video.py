@@ -47,6 +47,17 @@ def test_indice(tmp_path):
     assert "Hoy toca" in s and "Borrar progreso" in s and "Exportar progreso" in s and "localStorage" in s
     assert "window.Progreso" in s or "raiz.Progreso" in s        # progreso.js va embebido
     assert s.lower().count("</script") == s.lower().count("<script")
+    assert "raiz.Cuestionario" in s and '"preguntas": []' in s  # cuestionario.js también; sin preguntas, lista vacía
+
+
+def test_indice_con_preguntas(tmp_path):
+    q = {"id": "q1", "texto": "¿Qué cierra </script>?", "opciones": ["a", "b", "c"], "correcta": 0,
+         "explicacion": "Porque a.", "general": True}
+    s = reproductor.indice(tmp_path / "index.html", "C", [{"id": "t01", "archivo": "t01.html", "titulo": "A",
+                                                          "duracion": 30, "preguntas": [q]}]).read_text(encoding="utf-8")
+    videos = json.loads(re.search(r"const VIDEOS = (\[.*?\]), TX = ", s)[1])
+    assert videos[0]["preguntas"] == [q]
+    assert "¿Qué cierra <\\/script>?" in s and s.lower().count("</script") == s.lower().count("<script")
 
 
 def test_indice_con_ids_y_en_ingles(tmp_path):

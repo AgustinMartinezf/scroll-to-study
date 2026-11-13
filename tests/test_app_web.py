@@ -10,6 +10,7 @@ import functools
 import json
 import os
 import threading
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -246,3 +247,86 @@ def test_iphone_con_la_app_instalada_muestra_importar(contexto, sitio_url):
     ctx.add_init_script("Object.defineProperty(navigator, 'standalone', { get: () => true })")
     page = abrir(ctx, sitio_url)
     assert page.is_visible("#importar") and not page.is_visible("#instalar")
+
+
+# --- preguntas después del video (paquete v2) ------------------------------------------------------
+
+HOY = datetime(2026, 11, 12, 12, 0)
+PREGUNTAS = [
+    {"id": "q1", "texto": "¿A qué tabla apunta la FK de multa?", "opciones": ["A socio", "A prestamo", "A ejemplar"],
+     "correcta": 1, "explicacion": "Apunta a prestamo con id_prestamo.", "general": False},
+    {"id": "q2", "texto": "¿Cómo se ubica una FK?", "opciones": ["Por el nombre", "Por la dependencia", "Al azar"],
+     "correcta": 1, "explicacion": "Método general, no está en tu material: por la dependencia.", "general": True},
+]
+
+
+def paquete_v2():
+    """t01 trae preguntas; t02 no."""
+    d = paquete()
+    d["v"] = 2
+    for x in d["videos"]:
+        x["preguntas"] = PREGUNTAS if x["id"] == "t01" else []
+    return d
+
+
+def abrir_el_dia(ctx, url, fecha=HOY):
+    page = ctx.new_page()
+    page.clock.set_fixed_time(fecha)
+    page.goto(url)
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    return page
+
+
+def test_preguntas_despues_del_video_y_el_tema_vuelve_manana(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete_v2())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    assert texto(page, "#nHoy") == "2" and texto(page, "#lHoy") == "para hoy"
+    page.click("#toca")                                     # play -> fin (0,3 s) -> preguntas
+    page.wait_for_selector(".caja .s2s-quiz")
+    assert texto(page, ".s2s-quiz .q-num") == "Pregunta 1 de 2"
+    assert texto(page, ".s2s-quiz h2") == "¿A qué tabla apunta la FK de multa?"
+
+    page.click(".s2s-quiz .q-op >> text=A prestamo")        # bien
+    assert texto(page, ".s2s-quiz .q-exp b") == "¡Bien!"
+    page.click(".s2s-quiz .q-sig")
+    assert texto(page, ".s2s-quiz .q-gen") == "método general · no está en tu material"
+    page.click(".s2s-quiz .q-op >> text=Por el nombre")     # mal
+    assert page.eval_on_selector_all(".s2s-quiz .q-op", "bs => bs.map(b => b.className)") == [
+        "q-op mal", "q-op bien", "q-op"]
+    assert texto(page, ".s2s-quiz .q-exp b") == "No era esa."
+    assert "por la dependencia" in texto(page, ".s2s-quiz .q-exp")
+    page.click(".s2s-quiz .q-sig")
+    assert texto(page, ".s2s-quiz .q-res") == "1 de 2 correctas"
+    assert texto(page, ".s2s-quiz .q-vuelve") == "Este tema vuelve mañana."
+    assert texto(page, ".s2s-quiz .q-seguir") == "Seguir: Tema t02"
+    g = json.loads(page.evaluate("localStorage.getItem('s2s:Redes')"))
+    assert g["repaso"] == {"t01": {"nivel": 0, "proxima": "2026-11-13",
+                                   "historial": [{"fecha": "2026-11-12", "aciertos": 1, "total": 2}]}}
+    assert g["dias"] == {"2026-11-12": ["t01"]}
+
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    frame_del_video(page, "t02")                            # hoy toca t02 (nuevo); t01 vuelve mañana
+    assert page.query_selector(".s2s-quiz") is None
+    assert texto(page, "#lista li:nth-child(1) .s2s-rep") == "Al día · vuelve mañana"
+    assert texto(page, "#lista li:nth-child(2) .s2s-rep") == "Nuevo"
+    assert texto(page, "#nHoy") == "1" and texto(page, "#tToca") == "Tema t02"
+
+
+def test_saltear_preguntas_en_la_app(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete_v2())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    page.click("#toca")
+    page.wait_for_selector(".caja .s2s-quiz")
+    page.click(".s2s-quiz >> text=Saltear preguntas")
+    frame_del_video(page, "t02")                            # sigue con lo que toca hoy (y lo reproduce)
+    page.wait_for_function("document.getElementById('nVistos').textContent === '2 / 2'")
+    assert page.query_selector(".s2s-quiz") is None         # t02 no tiene preguntas
+    g = json.loads(page.evaluate("localStorage.getItem('s2s:Redes')"))
+    assert g["repaso"] == {} and g["dias"] == {"2026-11-12": ["t01", "t02"]}
+    assert texto(page, "#lista li:nth-child(1) .s2s-rep") == "Al día"
+    assert texto(page, "#tToca") == "Nada pendiente hoy" and texto(page, "#nHoy") == "0"
