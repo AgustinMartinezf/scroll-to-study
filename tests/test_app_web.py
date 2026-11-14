@@ -303,10 +303,17 @@ def test_la_cache_nueva_del_service_worker_no_sale_de_la_cache_http(contexto, si
     assert "S2S_SITIO = \"B\"" in texto_app and "S2S_SITIO = \"A\"" not in texto_app
 
 
+def version_de(url):
+    import urllib.request
+    return json.loads(urllib.request.urlopen(url + "version.json").read())["app"]
+
+
 def test_una_version_nueva_avisa_y_actualizar_corre_el_codigo_nuevo(contexto, sitio_cambiante):
     url, publicar = sitio_cambiante
     page = abrir(contexto(), url)
     page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    version_a = version_de(url)
+    page.wait_for_function("v => document.getElementById('version').textContent === 'versión ' + v", arg=version_a)
     assert page.evaluate("window.S2S_SITIO") == "A"
     page.wait_for_timeout(300)
     assert not page.is_visible("#nueva")                    # la primera instalación no es una versión nueva
@@ -326,6 +333,9 @@ def test_una_version_nueva_avisa_y_actualizar_corre_el_codigo_nuevo(contexto, si
 
     page.click("#actualizar")
     page.wait_for_function("document.documentElement.dataset.appLista === '1' && window.S2S_SITIO === 'B'")
+    version_b = version_de(url)
+    assert version_b != version_a
+    page.wait_for_function("v => document.getElementById('version').textContent === 'versión ' + v", arg=version_b)
     assert not page.is_visible("#nueva") and texto(page, "#titulo") == "Redes"
 
 

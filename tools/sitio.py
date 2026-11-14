@@ -7,13 +7,15 @@
 
 progreso.js, cuestionario.js and reproduccion.js have a single source (skills/scroll-to-study/scripts/, shared with the
 computer playlist) and are copied here, not kept in web/. The service worker gets a version (a hash of every file of the site) and the list of
-files to cache, so every published change uses a new cache. .github/workflows/pages.yml runs this same
-script.
+files to cache, so every published change uses a new cache. version.json holds that same version ("app",
+shown small at the bottom of the app) and the package versions the app accepts ("paquetes", from
+web/paquete.js). .github/workflows/pages.yml runs this same script.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -26,6 +28,14 @@ REPRODUCCION = PROGRESO.with_name("reproduccion.js")
 COMPARTIDOS = (PROGRESO, CUESTIONARIO, REPRODUCCION)       # una sola fuente, compartida con la lista de la compu
 ICONO = RAIZ / ".claude-plugin" / "icon.png"
 ICONOS = {"icono-192.png": 192, "icono-512.png": 512, "apple-touch-icon.png": 180}
+
+
+def versiones_de_paquete(paquete_js: Path) -> list[int]:
+    """Las versiones de paquete que acepta la app (const VERSIONES = [...] de web/paquete.js)."""
+    m = re.search(r"const VERSIONES = \[([\d,\s]+)\]", paquete_js.read_text(encoding="utf-8"))
+    if not m:
+        raise SystemExit("web/paquete.js lost its `const VERSIONES = [...]` line")
+    return [int(x) for x in m[1].split(",") if x.strip()]
 
 
 def armar(destino: Path) -> Path:
@@ -41,11 +51,16 @@ def armar(destino: Path) -> Path:
     huella = hashlib.sha256()
     for nombre in archivos + ["sw.js"]:
         huella.update(nombre.encode() + b"\0" + (destino / nombre).read_bytes())
+    version = huella.hexdigest()[:12]
+    # version.json sale de lo que ya está en la huella (paquete.js incluido): no hace falta sumarlo a ella
+    (destino / "version.json").write_text(
+        json.dumps({"app": version, "paquetes": versiones_de_paquete(destino / "paquete.js")}) + "\n", encoding="utf-8")
+    archivos = sorted(archivos + ["version.json"])
     sw = (destino / "sw.js").read_text(encoding="utf-8")
     for marca in ('"__VERSION__"', "/*__ARCHIVOS__*/"):
         if marca not in sw:
             raise SystemExit(f"web/sw.js lost its {marca} placeholder")
-    sw = sw.replace('"__VERSION__"', json.dumps(huella.hexdigest()[:12]))
+    sw = sw.replace('"__VERSION__"', json.dumps(version))
     sw = sw.replace("/*__ARCHIVOS__*/", ", ".join(json.dumps(a) for a in archivos))
     (destino / "sw.js").write_text(sw, encoding="utf-8")
     return destino

@@ -77,6 +77,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 #toca:disabled { opacity:.8; cursor:default; }
 .nueva { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between;
   background:var(--card); border:1px solid var(--accent); border-radius:14px; padding:12px 14px; font-weight:600; }
+.pie { color:var(--muted); font-size:11px; text-align:center; opacity:.8; font-variant-numeric:tabular-nums; }
 @media (prefers-reduced-motion:reduce) { .barra i { transition:none; } }
 </style></head><body>
 <div class="wrap">
@@ -134,6 +135,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
       <ol id="lista"></ol>
     </div>
   </div>
+  <footer class="pie"><small id="version"></small></footer>
 </div>
 <script src="progreso.js"></script>
 <script src="cuestionario.js"></script>

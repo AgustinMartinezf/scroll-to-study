@@ -11,7 +11,8 @@
  *   está en reproduccion.js, compartido con la lista de la compu.
  * - Actualizaciones: al abrir la app y cada vez que vuelve a primer plano se le pide al service worker que
  *   busque una versión nueva. Si se instala una, aparece "Hay una versión nueva de la app" con "Actualizar",
- *   que recarga la página. Nunca se recarga sola (podría estar sonando un video).
+ *   que recarga la página. Nunca se recarga sola (podría estar sonando un video). Al pie, chica, la
+ *   versión que corre (version.json, que arma tools/sitio.py).
  * - Cada video corre en un iframe sandbox (sin allow-same-origin) desde una URL blob: no puede leer los
  *   otros paquetes ni el progreso. Habla con la lista por postMessage, como en videos/index.html.
  */
@@ -58,7 +59,7 @@
       cero: "Borrar progreso", seguro: "¿Borrar todo el progreso de «{t}»?",
       exportar: "Exportar progreso", copiado: "Copiado al portapapeles",
       copiaManual: "No se pudo copiar solo: seleccioná este texto y copialo.",
-      nueva: "Hay una versión nueva de la app", actualizar: "Actualizar",
+      nueva: "Hay una versión nueva de la app", actualizar: "Actualizar", version: "versión {v}",
     },
     en: {
       importar: "Import videos", elegir: "Saved videos", borrar: "Delete",
@@ -95,7 +96,7 @@
       cero: "Clear progress", seguro: "Clear all progress for “{t}”?",
       exportar: "Export progress", copiado: "Copied to the clipboard",
       copiaManual: "Couldn't copy it automatically: select this text and copy it.",
-      nueva: "There is a new version of the app", actualizar: "Update",
+      nueva: "There is a new version of the app", actualizar: "Update", version: "version {v}",
     },
   };
   const IDIOMA = /^es\b/i.test(navigator.language || "") ? "es" : "en";
@@ -439,7 +440,7 @@
   };
 
   // ---------------------------------------------------------------------------------------------
-  // actualizaciones
+  // versión de la app y actualizaciones
   // ---------------------------------------------------------------------------------------------
   let registro = null;
   /** Le pide al service worker que busque una versión nueva (sin red, falla callado). */
@@ -449,6 +450,13 @@
   function hayVersionNueva() { $("nueva").hidden = false; }
   // solo la recarga quien toca el botón: nunca sola, por si suena un video
   $("actualizar").onclick = () => location.reload();
+
+  function mostrarVersion() {
+    fetch("version.json")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d && typeof d.app === "string") $("version").textContent = fmt(TX.version, { v: d.app }); })
+      .catch(() => {});
+  }
 
   if ("serviceWorker" in navigator) {
     const sw = navigator.serviceWorker;
@@ -473,6 +481,7 @@
       if (document.visibilityState === "visible") buscarVersionNueva();
     });
   }
+  mostrarVersion();
 
   // ---------------------------------------------------------------------------------------------
   // arranque
