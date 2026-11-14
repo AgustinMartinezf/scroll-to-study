@@ -251,7 +251,84 @@ def el_chat(e):
     head = f'<div class="chathead">{icon("users", 44, "#ffffff")}<span>{H.escape(e.get("title", "Chat"))}</span></div>'
     return f'<div class="card chat" id="{e["id"]}">{head}<div class="msgs">{msgs}</div></div>', 960, 110 + 118 * len(e["msgs"]) + 30
 
-MAKERS = {"table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
+# ---------- diagramas en SVG (secuencia) ----------
+# Las medidas (fs, columnas, filas) las calcula compile.py; los colores salen del tema.
+DIAG_ANCHO = 880   # compile.DIAG_ANCHO: la tarjeta de 960 menos sus márgenes
+
+def icono_svg(name, size, x, y, color):
+    """Un ícono adentro de un SVG: el mismo <svg> de Phosphor, ubicado con x e y."""
+    return icon(name, size, color).replace("<svg ", f'<svg x="{x:.0f}" y="{y:.0f}" class="dico" ', 1)
+
+def tachon(x0, x1, y):
+    # la raya de strike (con un borde del color de la tarjeta para que se vea sobre una caja roja):
+    # engine.js la dibuja con strokeDashoffset
+    d = f"M{x0:.0f} {y:.0f} L{x1:.0f} {y:.0f}"
+    return (f'<path class="dstk" d="{d}" stroke="{TP["dFondo"]}" stroke-width="14" stroke-linecap="round" fill="none"/>'
+            f'<path class="dstk" d="{d}" stroke="{TP["dCorte"]}" stroke-width="8" stroke-linecap="round" fill="none"/>')
+
+def caja_svg(gid, cls, cx, cy, w, h, txt, fs, bg, fg, borde, icono=None, extra=""):
+    """Una caja redondeada con texto (y un ícono opcional a la izquierda), agrupada con su id."""
+    ic = fs + 10 if icono else 0
+    tw = len(txt) * fs * 0.6
+    x_txt = cx + ic / 2
+    ico = icono_svg(icono, fs, x_txt - tw / 2 - ic, cy - fs / 2, fg) if icono else ""
+    return (f'<g id="{gid}" class="{cls}"{extra}><rect class="dfondo" x="{cx - w / 2:.1f}" y="{cy - h / 2:.1f}" width="{w:.1f}" '
+            f'height="{h:.1f}" rx="18" fill="{bg}" stroke="{borde}" stroke-width="4"/>{ico}'
+            f'<text class="dtxt" x="{x_txt:.1f}" y="{cy:.1f}" font-size="{fs}" fill="{fg}" text-anchor="middle" '
+            f'dominant-baseline="central">{H.escape(txt)}</text>{tachon(cx - w / 2 + 10, cx + w / 2 - 10, cy)}</g>')
+
+def el_secuencia(e):
+    sid = e["id"]; fs = e["fs"]; col = e["col"]; fila = e["fila"]
+    partes, msgs = e["partes"], e["mensajes"]
+    hb = round(fs * 1.2 + 28)                       # alto de la caja de cada parte
+    top = hb + 24                                   # donde empieza la primera fila de mensajes
+    H_ = top + fila * len(msgs) + 10
+    xs = [(i + 0.5) * col for i in range(len(partes))]
+    vidas = "".join(f'<path class="dvida" d="M{x:.1f} {hb} L{x:.1f} {H_}" stroke="{TP["dVida"]}" stroke-width="4" '
+                    f'stroke-dasharray="10 12" fill="none"/>' for x in xs)
+    cajas = ""
+    for i, p in enumerate(partes):
+        ic = fs + 10 if p.get("icon") else 0
+        w = min(col - 12, len(p["nombre"]) * fs * 0.6 + ic + 36)
+        cajas += caja_svg(f"{sid}-p{i}", "dparte", xs[i], hb / 2 + 2, w, hb - 4, p["nombre"], fs,
+                          TP["dParte"], TP["dParteInk"], TP["dParte"], p.get("icon"))
+    color_kind = {"good": TP["dBien"], "bad": TP["dMal"], "warn": TP["dAviso"]}
+    flechas = ""
+    for k, m in enumerate(msgs):
+        y = top + fila * k + fs + 24                # la flecha; el texto va arriba
+        x0, x1 = xs[m["de"]], xs[m["a"]]
+        col_m = color_kind.get(m.get("kind"), TP["dLinea"])
+        tw = len(m["texto"]) * fs * 0.6
+        if m["de"] == m["a"]:                        # a sí mismo: un lazo a la derecha que vuelve a su línea
+            d = f"M{x0:.1f} {y:.1f} H{x0 + 70:.1f} V{y + 30:.1f} H{x0 + 22:.1f}"
+            punta, sentido = (x0 + 4, y + 30), -1
+            cx = min(max(x0 + 35, tw / 2 + 10), DIAG_ANCHO - tw / 2 - 10)
+        else:
+            sentido = 1 if x1 > x0 else -1
+            fin = x0 + (x1 - x0) * 0.62 if m.get("perdido") else x1 - sentido * 22
+            d = f"M{x0:.1f} {y:.1f} H{fin:.1f}"
+            punta = (x1 - sentido * 4, y)
+            cx = (x0 + fin) / 2 if m.get("perdido") else (x0 + x1) / 2
+        px, py = punta
+        cabeza = ("" if m.get("perdido") else
+                  f'<path class="dcab" d="M{px:.1f} {py:.1f} L{px - sentido * 24:.1f} {py - 13:.1f} L{px - sentido * 24:.1f} {py + 13:.1f}Z" fill="{col_m}"/>')
+        corte = ""
+        if m.get("perdido"):                         # no llega: la flecha se corta con una X antes del destino
+            fx = x0 + (x1 - x0) * 0.62 + sentido * 22
+            corte = (f'<g class="dcorte"><path d="M{fx - 16:.1f} {y - 16:.1f} L{fx + 16:.1f} {y + 16:.1f} M{fx - 16:.1f} {y + 16:.1f} '
+                     f'L{fx + 16:.1f} {y - 16:.1f}" stroke="{TP["dCorte"]}" stroke-width="8" stroke-linecap="round" fill="none"/></g>')
+        ty = y - 14 - fs * 0.35                      # centro del texto
+        texto = (f'<g class="dlab"><rect class="dfondo" x="{cx - tw / 2 - 10:.1f}" y="{ty - fs * 0.62:.1f}" width="{tw + 20:.1f}" '
+                 f'height="{fs * 1.24:.1f}" rx="10" fill="{TP["dFondo"]}"/><text class="dtxt" x="{cx:.1f}" y="{ty:.1f}" '
+                 f'font-size="{fs}" fill="{TP["dTinta"]}" text-anchor="middle" dominant-baseline="central">{H.escape(m["texto"])}</text>'
+                 f'{tachon(cx - tw / 2 - 4, cx + tw / 2 + 4, ty)}</g>')
+        flechas += (f'<g id="{sid}-m{k}" class="dmsg"><path class="dlin" d="{d}" stroke="{col_m}" stroke-width="6" '
+                    f'stroke-linecap="round" stroke-linejoin="round" fill="none"/>{cabeza}{corte}{texto}</g>')
+    head = f'<div class="chead"><span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    svg = f'<svg class="dsvg" viewBox="0 0 {DIAG_ANCHO} {H_}" width="{DIAG_ANCHO}" height="{H_}">{vidas}{cajas}{flechas}</svg>'
+    return f'<div class="card diag secuencia" id="{sid}">{head}<div class="dbox">{svg}</div></div>', 960, H_ + (110 if head else 40) + 30
+
+MAKERS = {"secuencia": el_secuencia, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
           "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer,
           "counter": el_counter, "chart": el_chart, "chat": el_chat, "formula": el_formula, "venn": el_venn, "countdown": el_countdown}
 
@@ -333,6 +410,9 @@ def collect(e, si):
         for i in range(len(e["msgs"])): owner[f'{e["id"]}-m{i}'] = si
     if e["type"] == "venn":
         for code in VENN[len(e["sets"])]["pos"]: owner[f'{e["id"]}-{code}'] = si
+    if e["type"] == "secuencia":
+        for i in range(len(e["partes"])): owner[f'{e["id"]}-p{i}'] = si
+        for k in range(len(e["mensajes"])): owner[f'{e["id"]}-m{k}'] = si
 for si, st in enumerate(STATIONS):
     for e in st: collect(e, si)
 

@@ -88,3 +88,7 @@ html, body { margin:0; width:1080px; height:1920px; overflow:hidden; background:
 .cdr circle { fill:none; stroke:rgba(127,127,127,.25); stroke-width:14; }
 .cdr .cdp { stroke:var(--good); stroke-linecap:round; }
 .cdn { position:absolute; font:900 150px Inter; color:var(--ink); opacity:0; }
+/* diagramas en SVG (secuencia): los colores van en el SVG, desde el tema */
+.dbox { display:flex; justify-content:center; padding:10px 40px 30px; }
+.dsvg { display:block; overflow:visible; }
+.dtxt { font-family:Inter, sans-serif; font-weight:800; }

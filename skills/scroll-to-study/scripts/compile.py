@@ -56,9 +56,10 @@ TIPOS: dict[str, tuple[set[str], set[str]]] = {
     "formula": ({"id", "tex"}, {"label"}),
     "venn":    ({"id", "sets"}, {"labels", "title"}),
     "countdown": ({"id"}, {"seconds"}),
+    "secuencia": ({"id", "partes", "mensajes"}, {"title"}),
 }
 COMUNES = {"type", "gap", "align"}
-LAYOUT_DEL_COMPILADOR = {"fs", "w"}   # si el LLM los pone, se ignoran
+LAYOUT_DEL_COMPILADOR = {"fs", "w", "col", "fila"}   # si el LLM los pone, se ignoran
 
 # Ancho útil de una estación (el motor centra en x±490; dejo margen)
 ANCHO_MAX = 960
@@ -68,6 +69,16 @@ RITMO = 6.15         # sílabas por segundo de Piper davefx a velocidad 1.1 (med
 PAUSA_BLOQUE = 0.4   # GAPS al final de cada bloque
 PAUSA_TARDIA = 1.0   # ... si lo último que aparece cae en las últimas palabras
 PAUSA_FRASE = 0.22   # voice.py: GAP por defecto
+
+# Diagramas (secuencia): un SVG dentro de una tarjeta, con estas medidas (engine.py las usa tal cual)
+DIAG_ANCHO = ANCHO_MAX - 80   # la tarjeta menos sus márgenes
+DIAG_FS = 40                  # letra más grande de un diagrama
+K_LETRA = 0.6                 # ancho medio de una letra de Inter 800, en proporción al fs
+SEC_PARTES = (2, 4)
+SEC_MENSAJES = (1, 7)
+SEC_NOMBRE_MAX = 14
+SEC_TEXTO_MAX = 20
+SEC_KINDS = {"good", "bad", "warn"}
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +265,105 @@ class Ids:
     cuentas: dict[str, int] = field(default_factory=dict)        # id de countdown -> segundos
     consolas: set[str] = field(default_factory=set)
     dialogos: set[str] = field(default_factory=set)
+    mensajes: dict[str, tuple[str, int]] = field(default_factory=dict)   # id-mK -> (id de la secuencia, K)
+
+
+# ---------------------------------------------------------------------------
+# Diagramas: secuencia
+# ---------------------------------------------------------------------------
+
+def _ancho(txt: str, fs: float) -> float:
+    return len(txt) * fs * K_LETRA
+
+
+def normalizar_secuencia(e: dict[str, Any], donde: str, rep: Reporte) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+    """partes -> [{nombre, icon?}], mensajes -> [{de, a, texto, kind?, perdido?}] con de y a como índices."""
+    partes_in, msgs_in = e["partes"], e["mensajes"]
+    if not isinstance(partes_in, list) or not SEC_PARTES[0] <= len(partes_in) <= SEC_PARTES[1]:
+        rep.error(donde, f"una secuencia lleva entre {SEC_PARTES[0]} y {SEC_PARTES[1]} partes")
+        return None
+    if not isinstance(msgs_in, list) or not SEC_MENSAJES[0] <= len(msgs_in) <= SEC_MENSAJES[1]:
+        rep.error(donde, f"una secuencia lleva entre {SEC_MENSAJES[0]} y {SEC_MENSAJES[1]} mensajes")
+        return None
+    partes = []
+    for i, p in enumerate(partes_in):
+        p = {"nombre": p} if isinstance(p, str) else p
+        if not isinstance(p, dict) or not isinstance(p.get("nombre"), str) or not p["nombre"].strip():
+            rep.error(donde, f"la parte {i} tiene que ser un nombre o {{\"nombre\": …, \"icon\": …}}")
+            return None
+        if len(p["nombre"]) > SEC_NOMBRE_MAX:
+            rep.error(donde, f"el nombre de la parte «{p['nombre']}» pasa de {SEC_NOMBRE_MAX} caracteres")
+        partes.append({k: v for k, v in p.items() if k in ("nombre", "icon")})
+    nombres = [p["nombre"] for p in partes]
+    if len(set(nombres)) != len(nombres):
+        rep.error(donde, "dos partes con el mismo nombre")
+
+    def parte(v: Any, k: int, campo: str) -> int | None:
+        if isinstance(v, bool):
+            v = None
+        if isinstance(v, int) and 0 <= v < len(partes):
+            return v
+        if isinstance(v, str) and v in nombres:
+            return nombres.index(v)
+        rep.error(donde, f"el mensaje {k}: {campo}={v!r} no es una parte (índice 0 a {len(partes) - 1} "
+                         f"o uno de {', '.join(nombres)})")
+        return None
+
+    mensajes = []
+    for k, m in enumerate(msgs_in):
+        if isinstance(m, list) and len(m) == 4 and isinstance(m[3], dict):
+            m = {"de": m[0], "a": m[1], "texto": m[2], **m[3]}
+        elif isinstance(m, list) and len(m) == 3:
+            m = {"de": m[0], "a": m[1], "texto": m[2]}
+        if not isinstance(m, dict) or not {"de", "a", "texto"} <= m.keys():
+            rep.error(donde, f"el mensaje {k} tiene que ser [de, a, texto] (y opcional {{\"kind\": …, \"perdido\": true}})")
+            return None
+        de, a = parte(m["de"], k, "de"), parte(m["a"], k, "a")
+        if de is None or a is None:
+            return None
+        texto = str(m["texto"])
+        if not texto.strip():
+            rep.error(donde, f"el mensaje {k} no tiene texto")
+        if len(texto) > SEC_TEXTO_MAX:
+            rep.error(donde, f"el texto del mensaje {k} «{texto}» pasa de {SEC_TEXTO_MAX} caracteres")
+        msg: dict[str, Any] = {"de": de, "a": a, "texto": texto}
+        if "kind" in m:
+            if m["kind"] not in SEC_KINDS:
+                rep.error(donde, f"el mensaje {k}: kind «{m['kind']}» no existe ({', '.join(sorted(SEC_KINDS))})")
+            msg["kind"] = m["kind"]
+        if m.get("perdido"):
+            if m["perdido"] is not True:
+                rep.error(donde, f"el mensaje {k}: perdido va true o no va")
+            elif de == a:
+                rep.error(donde, f"el mensaje {k} es a sí mismo: no puede perderse")
+            msg["perdido"] = True
+        for x in m.keys() - {"de", "a", "texto", "kind", "perdido"}:
+            rep.aviso(donde, f"el mensaje {k}: clave «{x}» desconocida")
+        mensajes.append(msg)
+    return partes, mensajes
+
+
+def layout_secuencia(partes: list[dict[str, Any]], mensajes: list[dict[str, Any]],
+                     donde: str, rep: Reporte) -> tuple[int, float, int]:
+    """(fs, ancho de columna, alto de fila). Una columna por parte en DIAG_ANCHO; cada nombre entra en su
+    columna y cada texto entre las líneas de vida que une su flecha."""
+    col = DIAG_ANCHO / len(partes)
+    fs = DIAG_FS
+    culpa = ""
+    for p in partes:
+        ic = 1 if p.get("icon") else 0
+        f = int((col - 16 - 32 - 10 * ic) / (K_LETRA * max(1, len(p["nombre"])) + ic))
+        if f < fs:
+            fs, culpa = f, f"el nombre «{p['nombre']}»"
+    for k, m in enumerate(mensajes):
+        tramo = col * max(1, abs(m["a"] - m["de"]))
+        f = int((tramo - 28) / (K_LETRA * max(1, len(m["texto"]))))
+        if f < fs:
+            fs, culpa = f, f"el texto del mensaje {k} «{m['texto']}»"
+    if fs < FS_MIN:
+        rep.error(donde, f"{culpa} no entra en su columna ni con letra {FS_MIN}px "
+                         f"({len(partes)} partes de {col:.0f}px): acortalo o usá menos partes")
+    return fs, round(col, 1), fs + 64
 
 
 def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
@@ -418,6 +528,24 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
             if len(m[1]) > 70:
                 rep.error(donde, f"el mensaje {i} pasa de 70 caracteres")
             nuevo_id(f"{e['id']}-m{i}")
+    elif tipo == "secuencia":
+        sec = normalizar_secuencia(e, donde, rep)
+        if sec is None:
+            return None
+        partes, mensajes = sec
+        for i, p in enumerate(partes):
+            nuevo_id(f"{e['id']}-p{i}")
+            ids.con_tachado.add(f"{e['id']}-p{i}")
+            if p.get("icon"):
+                iconos.add(p["icon"])
+        for k in range(len(mensajes)):
+            nuevo_id(f"{e['id']}-m{k}")
+            ids.con_tachado.add(f"{e['id']}-m{k}")
+            ids.mensajes[f"{e['id']}-m{k}"] = (e["id"], k)
+        out["partes"], out["mensajes"] = partes, mensajes
+        out["fs"], out["col"], out["fila"] = layout_secuencia(partes, mensajes, donde, rep)
+        if out["fs"] < FS_MIN:
+            return None          # el error ya dice qué no entra
     elif tipo == "row":
         n = len(e["items"])
         maxw = (ANCHO_MAX - 24 * (n - 1)) / max(1, n)
@@ -499,6 +627,7 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
     anclas_final: dict[str, str] = {}
     total_palabras = 0
     hay_boom = False
+    mostrados: set[str] = set()     # mensajes que ya aparecieron (para avisar si salen de orden)
     secciones = [(b, bl.get("frases", [])) for b, bl in enumerate(bloques)] + [("final", final.get("frases", []))]
     for b, frases in secciones:
         if not frases:
@@ -523,6 +652,7 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
                     rep.error(donde, f"{et.accion} → id «{et.id}» no existe en este bloque{otro}")
                     continue
                 chequear_accion(et, ids, donde, rep)
+                chequear_orden(et, ids, mostrados, donde, rep)
                 hay_boom |= et.accion == "boom"
                 a = ancla(i, fr, idx, et.off, donde, rep)
                 eventos_bloque += 1
@@ -553,6 +683,9 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
             rep.error("final", f"la línea {lid} nunca aparece: poné {{show {lid}}} en la frase de cierre")
     if "fnext" not in anclas_final:
         rep.error("final", "falta {show fnext} antes de la palabra «Mañana»")
+    for mid in ids.mensajes:
+        if mid not in mostrados:
+            rep.aviso("guion", f"el mensaje {mid} nunca se muestra: poné {{show {mid}}} en la palabra que lo nombra")
     if not hay_boom:
         rep.aviso("guion", "no hay clímax marcado (ninguna acción boom)")
 
@@ -620,9 +753,22 @@ def chequear_fuentes(b: int, bloque: dict[str, Any], afirm: dict[str, Any], rep:
         rep.aviso(f"bloque {b}", f"no aparecen en sus fuentes (¿inventados?): {', '.join(sueltos)}")
 
 
+def chequear_orden(et: Etiqueta, ids: Ids, mostrados: set[str], donde: str, rep: Reporte) -> None:
+    """Los mensajes de una secuencia se leen en orden."""
+    if et.accion != "show":
+        return
+    if et.id in ids.mensajes:
+        sid, k = ids.mensajes[et.id]
+        if k > 0 and f"{sid}-m{k - 1}" not in mostrados:
+            rep.aviso(donde, f"{et.id} se muestra antes que {sid}-m{k - 1}: los mensajes se leen en orden, "
+                             "de arriba hacia abajo")
+    mostrados.add(et.id)
+
+
 def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
     requisitos = {
-        "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo o big"),
+        "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo, big "
+                                    "o partes y mensajes de una secuencia"),
         "swap": (ids.con_alt, "solo chips con «alt»"),
         "type": (ids.consolas, "solo consolas"),
         "point": (ids.dialogos, "solo diálogos"),
