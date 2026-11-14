@@ -508,6 +508,44 @@ def test_si_la_app_entera_se_corto_sonando_anota_el_corte_y_ofrece_seguir_desde_
     assert texto(page2, "#tAhora") == "Tema t02"
 
 
+def test_cerrar_la_app_a_mitad_de_un_video_ofrece_seguir_y_no_es_un_corte(contexto, sitio_url):
+    """Cerrar la app (pagehide) con un video sonando deja la marca con cerrada: true: al volver se ofrece
+    "Seguir desde m:ss", pero no se anota un corte."""
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    page.click("#sig")
+    f = frame_del_video(page, "t02")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't02' } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 12.5, video: 't02' } }, '*')")
+    page.wait_for_function("localStorage.getItem('s2s-marca:Redes') !== null")
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    f = frame_del_video(page, "t02")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 12.5}]     # quieto ahí: no reproduce solo
+    assert page.evaluate("localStorage.getItem('s2s-cortes:Redes')") is None
+    assert page.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
+    assert texto(page, "#tAhora") == "Tema t02"
+
+
+def test_una_marca_de_hace_mas_de_12_horas_no_ofrece_seguir(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    vieja = {"video": "t02", "t": 31.5, "fecha": "2026-11-11T20:00:00.000Z"}
+    page.evaluate("m => localStorage.setItem('s2s-marca:Redes', m)", json.dumps(vieja))
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    f = frame_del_video(page, "t01")                            # lo que toca hoy
+    page.wait_for_timeout(200)
+    assert f.evaluate("window.recibidos") == []
+    assert page.evaluate("localStorage.getItem('s2s-cortes:Redes')") is None
+    assert page.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
+
+
 def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
     page = abrir_el_dia(contexto(), sitio_url)
     importar(page, paquete_v2())

@@ -62,3 +62,12 @@ def test_leer_marca_de_sonando_descarta_lo_que_no_entiende():
              {"video": "t01", "t": 3}]
     r = correr(f"return {json.dumps(casos)}.map(R.leerMarca);")
     assert r == [bueno, bueno, None, None, None, None, None]
+
+
+def test_leer_marca_conserva_cerrada_y_una_marca_vale_12_horas():
+    m = {"video": "t02", "t": 25.4, "fecha": "2026-11-13T10:00:00.000Z"}
+    r = correr(f"""const m = {json.dumps(m)}, ahora = Date.parse(m.fecha);
+      return [R.MARCA_HORAS, R.leerMarca(Object.assign({{ cerrada: true }}, m)), R.leerMarca(Object.assign({{ cerrada: 1 }}, m)),
+              R.marcaVigente(m, ahora), R.marcaVigente(m, ahora + 11.9 * 3600e3), R.marcaVigente(m, ahora + 12 * 3600e3),
+              R.marcaVigente(Object.assign({{}}, m, {{ fecha: 'x' }}), ahora)];""")
+    assert r == [12, dict(m, cerrada=True), m, True, True, False, False]

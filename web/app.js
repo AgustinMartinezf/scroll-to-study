@@ -227,9 +227,9 @@
     document.title = actual.titulo;
     $("titulo").textContent = actual.titulo;
     pintarApp();
-    // si la app se cerró sola con un video sonando (en el iPhone, sin memoria se recarga entera), se anota el
-    // corte y se abre ese video quieto donde iba, con "Seguir desde m:ss" (reproduccion.js); si no, lo que
-    // toca hoy (o el último, si no queda nada)
+    // si la app se cerró con un video a medias (la cerró la persona, o iOS sin memoria: ahí se anota el corte),
+    // se abre ese video quieto donde iba, con "Seguir desde m:ss" (reproduccion.js); si no, lo que toca hoy (o
+    // el último, si no queda nada)
     const corte = R.corteAnterior(id => VIDEOS.some(x => x.id === id));
     if (corte) { abrir(pos(corte.video), false, corte.t); return; }
     const inicial = P.queTocaHoy(st, VIDEOS, hoy());
