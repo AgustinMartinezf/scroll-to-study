@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
+### Added
+
+- Two diagrams for content that a table or a flow drew badly (a DNSSEC video showed its key pairs and
+  chain of trust as a table):
+  - `secuencia`, a sequence diagram for protocols and exchanges between 2 to 4 parties: one column
+    and a dotted lifeline per part, and up to 7 messages that appear one by one, each arrow drawn from
+    sender to receiver and then its text. A message can be colored (good, bad, warn), go to itself
+    (a loop) or get lost (`perdido`: the arrow stops with an X before the target).
+  - `arbol`, a tree for hierarchies and chains (up to 10 nodes, 4 levels and 4 children per node),
+    laid out top-down with every parent centered over its children and no crossings. A node appears by
+    drawing the edge that reaches it first.
+  - The `ruta` action walks a tree from the root to a node, lighting each edge and node in turn on
+    that word (a chain of trust, a DNS resolution, a search in a binary tree).
+  - `hl`, `good`, `bad` and `strike` work on the parts and messages of a sequence and the nodes of a
+    tree. Both are SVG inside a card, animated only with opacity, 2D scale, position and
+    `strokeDashoffset` (no 3D layers, for iOS), with their colors in the `cuaderno` and `pizarra`
+    themes.
+  - The compiler checks the limits, parts and parents that do not exist, cycles, repeated ids and
+    whether everything fits at a readable size (it computes the columns, rows, positions and font
+    size), and warns when a message is shown before the previous one or a node before its parent.
+
+### Changed
+
+- `prompts/guion.md` sends exchanges between parties to `secuencia` (better than a flow with `send`
+  when there are round trips or more than 2 messages) and hierarchies and chains to `arbol` with
+  `ruta`; `flow` is left for one-direction processes. The question example (TCP handshake) uses a
+  sequence diagram and the myth example (`fork()`) a tree of parent and child processes.
+
 ## [0.5.0] - 2026-11-14
 
 ### Changed
@@ -165,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...v0.4.1
