@@ -14,6 +14,7 @@ if not os.path.exists(_ruta_tema):
     raise SystemExit(f"estilo desconocido «{ESTILO}»")
 TEMA = json.load(open(_ruta_tema, encoding="utf-8"))
 TP = TEMA["py"]
+C_TEMA = TEMA["c"]
 
 V = sys.argv[1]
 HERE = os.path.abspath(V)
@@ -251,8 +252,8 @@ def el_chat(e):
     head = f'<div class="chathead">{icon("users", 44, "#ffffff")}<span>{H.escape(e.get("title", "Chat"))}</span></div>'
     return f'<div class="card chat" id="{e["id"]}">{head}<div class="msgs">{msgs}</div></div>', 960, 110 + 118 * len(e["msgs"]) + 30
 
-# ---------- diagramas en SVG (secuencia) ----------
-# Las medidas (fs, columnas, filas) las calcula compile.py; los colores salen del tema.
+# ---------- diagramas en SVG (secuencia y árbol) ----------
+# Las medidas (fs, columnas, filas, posiciones) las calcula compile.py; los colores salen del tema.
 DIAG_ANCHO = 880   # compile.DIAG_ANCHO: la tarjeta de 960 menos sus márgenes
 
 def icono_svg(name, size, x, y, color):
@@ -328,7 +329,26 @@ def el_secuencia(e):
     svg = f'<svg class="dsvg" viewBox="0 0 {DIAG_ANCHO} {H_}" width="{DIAG_ANCHO}" height="{H_}">{vidas}{cajas}{flechas}</svg>'
     return f'<div class="card diag secuencia" id="{sid}">{head}<div class="dbox">{svg}</div></div>', 960, H_ + (110 if head else 40) + 30
 
-MAKERS = {"secuencia": el_secuencia, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
+def el_arbol(e):
+    tid = e["id"]; fs = e["fs"]; h = e["caja_h"]; H_ = e["alto"]; pos = e["pos"]
+    aristas, cajas = "", ""
+    for n in e["nodos"]:
+        x, y, w = pos[n["id"]]
+        if n.get("padre") is not None:
+            px, py, _ = pos[n["padre"]]
+            y0, y1 = py + h / 2, y - h / 2; ym = (y0 + y1) / 2
+            d = f"M{px:.1f} {y0:.1f} C{px:.1f} {ym:.1f} {x:.1f} {ym:.1f} {x:.1f} {y1:.1f}"
+            aristas += (f'<g id="{tid}-e-{n["id"]}" class="darista"><path class="dbase" d="{d}" stroke="{TP["dArista"]}" '
+                        f'stroke-width="6" fill="none" stroke-linecap="round"/><path class="druta" d="{d}" stroke="{C_TEMA["ruta"]}" '
+                        f'stroke-width="12" fill="none" stroke-linecap="round"/></g>')
+        bg, fg = KIND[n["kind"]] if n.get("kind") else (TP["dNodo"], TP["dTinta"])
+        extra = f' data-arbol="{tid}"' + (f' data-padre="{n["padre"]}"' if n.get("padre") is not None else ' data-raiz="1"')
+        cajas += caja_svg(n["id"], "dnodo", x, y, w, h, n["text"], fs, bg, fg, TP["dBorde"], n.get("icon"), extra)
+    head = f'<div class="chead"><span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    svg = f'<svg class="dsvg" viewBox="0 0 {DIAG_ANCHO} {H_}" width="{DIAG_ANCHO}" height="{H_}">{aristas}{cajas}</svg>'
+    return f'<div class="card diag arbol" id="{tid}">{head}<div class="dbox">{svg}</div></div>', 960, H_ + (110 if head else 40) + 30
+
+MAKERS = {"secuencia": el_secuencia, "arbol": el_arbol, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
           "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer,
           "counter": el_counter, "chart": el_chart, "chat": el_chat, "formula": el_formula, "venn": el_venn, "countdown": el_countdown}
 
@@ -413,6 +433,10 @@ def collect(e, si):
     if e["type"] == "secuencia":
         for i in range(len(e["partes"])): owner[f'{e["id"]}-p{i}'] = si
         for k in range(len(e["mensajes"])): owner[f'{e["id"]}-m{k}'] = si
+    if e["type"] == "arbol":
+        for n in e["nodos"]:
+            owner[n["id"]] = si
+            if n.get("padre") is not None: owner[f'{e["id"]}-e-{n["id"]}'] = si
 for si, st in enumerate(STATIONS):
     for e in st: collect(e, si)
 
@@ -504,6 +528,7 @@ for e in EV:
     elif e["a"] == "boom": sfx("impact-bass-1.mp3", t, 0.55); sfx("riser.mp3", t - 1.9, 0.2)
     elif e["a"] in ("good",): sfx("click.mp3", t, 0.35)
     elif e["a"] == "strike": sfx("click-soft.mp3", t, 0.45)
+    elif e["a"] == "ruta": sfx("click.mp3", t, 0.35)
 
 STATE = {"C": TEMA["c"], "D": D, "boxes": boxes, "EV": EV, "travel": travel, "hidden": hidden, "words": words, "phrases": phrases,
          "chars": [e["id"] + "-c" for st in STATIONS for e in st if e["type"] == "dialog"],

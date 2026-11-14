@@ -224,7 +224,7 @@ def avisos_iconos(guion: dict[str, Any], afirm: list[dict[str, Any]]) -> list[st
 
 # acciones que cambian cómo se ve una escena (un paquete que viaja, un chip que se da vuelta, algo tachado):
 # entran en el resumen junto a los tipos de elemento, como «flow+send»
-ACCIONES_DE_ESCENA = ("send", "swap", "strike")
+ACCIONES_DE_ESCENA = ("send", "swap", "strike", "ruta")
 REGLA_VARIEDAD = ("Do not open with the same element as the previous video, and do not repeat the exact "
                   "combination of element types of any earlier video.")
 

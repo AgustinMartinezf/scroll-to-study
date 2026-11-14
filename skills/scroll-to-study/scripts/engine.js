@@ -61,17 +61,18 @@ document.querySelectorAll(".bfill").forEach(e => gsap.set(e, { scaleX: 0 }));
 document.querySelectorAll(".vlab").forEach(e => gsap.set(e, { opacity: 0 }));
 document.querySelectorAll(".msg .mtxt").forEach(e => gsap.set(e, { opacity: 0 }));
 document.querySelectorAll(".msg").forEach(e => { if (!HID.has(e.id)) gsap.set(e, { opacity: 0 }); });
-// diagramas (secuencia, en SVG): los trazos se dibujan con strokeDashoffset y se colorean por atributo
+// diagramas (secuencia y árbol, en SVG): los trazos se dibujan con strokeDashoffset y se colorean por atributo
 const largo = p => p.getTotalLength();
 // un trazo sin dibujar queda además transparente: con la punta redonda, un trazo de largo 0 deja un punto
 const trazar = (p, t, dur) => { const L = largo(p);
   tl.fromTo(p, { strokeDashoffset: L, opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: dur, ease: "power2.out" }, t); };
-document.querySelectorAll(".dlin, .dstk").forEach(p => { const L = largo(p); gsap.set(p, { strokeDasharray: L, strokeDashoffset: L, opacity: 0 }); });
+document.querySelectorAll(".dlin, .dbase, .druta, .dstk").forEach(p => { const L = largo(p); gsap.set(p, { strokeDasharray: L, strokeDashoffset: L, opacity: 0 }); });
 document.querySelectorAll(".dmsg").forEach(m => {   // los mensajes arrancan ocultos y aparecen de a uno
   gsap.set(m, { opacity: 0 });
   m.querySelectorAll(".dcab, .dcorte, .dlab").forEach(x => gsap.set(x, { opacity: 0 }));
 });
-const esDiagrama = el => el instanceof SVGElement && ["dparte", "dmsg"].some(c => el.classList.contains(c));
+document.querySelectorAll(".dnodo[data-padre]").forEach(n => gsap.set(n, { opacity: 0 }));   // del árbol se ve la raíz
+const esDiagrama = el => el instanceof SVGElement && ["dparte", "dmsg", "dnodo"].some(c => el.classList.contains(c));
 function dibujarMsg(m, t) {
   tl.fromTo(m, { opacity: 0 }, { opacity: 1, duration: 0.05 }, t);
   trazar(m.querySelector(".dlin"), t, 0.45);
@@ -80,7 +81,12 @@ function dibujarMsg(m, t) {
   if (corte) tl.fromTo(corte, { opacity: 0, scale: 1.8, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, t + 0.42);
   tl.fromTo(m.querySelector(".dlab"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, t + 0.45);
 }
-function colorear(el, t, fondo, tinta, linea) {   // hl, good y bad sobre una parte o un mensaje
+function aparecerNodo(n, t) {   // primero la arista que llega, después la caja
+  const ar = n.dataset.padre ? $(n.dataset.arbol + "-e-" + n.id) : null;
+  if (ar) trazar(ar.querySelector(".dbase"), t, 0.35);
+  tl.fromTo(n, { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, t + (ar ? 0.3 : 0));
+}
+function colorear(el, t, fondo, tinta, linea) {   // hl, good, bad y ruta sobre una parte, un mensaje o un nodo
   if (el.classList.contains("dmsg")) {
     tl.to(el.querySelectorAll(".dlin"), { attr: { stroke: linea }, duration: 0.25 }, t);
     tl.to(el.querySelectorAll(".dcab"), { attr: { fill: linea }, duration: 0.25 }, t);
@@ -93,6 +99,7 @@ function colorear(el, t, fondo, tinta, linea) {   // hl, good y bad sobre una pa
   }
   tl.fromTo(el, { scale: 1 }, { scale: 1.08, transformOrigin: "50% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
 }
+const aparecido = new Set();   // nodos que una ruta ya hizo aparecer
 // apariciones compuestas
 function rodar(el, t) {
   el.querySelectorAll(".dg").forEach((d, i) => tl.fromTo(d.querySelector(".dcol"), { yPercent: 0 },
@@ -176,6 +183,8 @@ S.EV.forEach(e => {
       else if (cls.contains("bar")) { tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.2 }, t); crecer(el, t); }
       else if (cls.contains("msg")) escribir(el, t);
       else if (cls.contains("dmsg")) dibujarMsg(el, t);
+      else if (cls.contains("dnodo")) { aparecerNodo(el, t); aparecido.add(id); }
+      else if (cls.contains("darista")) trazar(el.querySelector(".dbase"), t, 0.35);
       else if (cls.contains("dparte")) tl.fromTo(q(id), { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, t);
       else if (cls.contains("card")) {
         tl.fromTo(q(id), { opacity: 0, y: 110, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" }, t);
@@ -228,6 +237,27 @@ S.EV.forEach(e => {
       tl.fromTo(pk, { y: 0 }, { y: -40, duration: dur / 2, ease: "sine.out", yoyo: true, repeat: 1 }, t + 0.1);
       tl.to(pk, { opacity: 0, scale: 0.5, duration: 0.2 }, t + 0.1 + dur);
       tl.fromTo(a, { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1 }, t + 0.1 + dur - 0.05);
+      break; }
+    case "ruta": {   // de la raíz hasta un nodo: cada arista y cada nodo del camino se resaltan de a uno
+      const camino = []; for (let n = $(x.hasta); n; n = n.dataset.padre ? $(n.dataset.padre) : null) camino.unshift(n);
+      const fondo = x.kind === "good" ? C.good : (x.kind === "bad" ? C.bad : C.ruta);
+      const tinta = x.kind === "good" ? C.goodInk : (x.kind === "bad" ? C.badInk : C.rutaInk);
+      const paso = 0.3;
+      camino.forEach((n, k) => {
+        const tk = t + k * paso;
+        if (k > 0) {
+          const ar = $(id + "-e-" + n.id), sobre = ar.querySelector(".druta");
+          // si el nodo todavía no se ve, la ruta lo hace aparecer
+          if (!aparecido.has(n.id) && !S.EV.some(e => e.a === "show" && e.id === n.id && e.t <= tk)) {
+            trazar(ar.querySelector(".dbase"), tk - paso, paso * 0.8);
+            tl.fromTo(n, { opacity: 0 }, { opacity: 1, duration: 0.15 }, tk - 0.05);
+            aparecido.add(n.id);
+          }
+          tl.set(sobre, { attr: { stroke: fondo } }, tk - paso);
+          tl.fromTo(sobre, { strokeDashoffset: largo(sobre), opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: paso * 0.9, ease: "power1.inOut" }, tk - paso);
+        }
+        colorear(n, tk, fondo, tinta, fondo);
+      });
       break; }
     case "swap": { const a = $(id + "-alt");   // el giro es un scaleY (2D): girar en X crearía una capa 3D
       tl.fromTo(a, { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.35, ease: "back.out(1.6)" }, t); break; }

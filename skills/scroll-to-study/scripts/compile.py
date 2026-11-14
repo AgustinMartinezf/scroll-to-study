@@ -31,8 +31,8 @@ def norm(w: str) -> str:
 
 
 ACCIONES = {"show", "hide", "hl", "good", "bad", "strike", "swap", "type",
-            "pulse", "shake", "boom", "point", "focus", "send"}
-EXTRAS_VALIDOS = {"from", "rot", "until", "bg", "color", "dur", "s", "dy", "de", "a", "texto"}
+            "pulse", "shake", "boom", "point", "focus", "send", "ruta"}
+EXTRAS_VALIDOS = {"from", "rot", "until", "bg", "color", "dur", "s", "dy", "de", "a", "texto", "hasta", "kind"}
 KINDS = {"good", "bad", "warn", "neutral", "blue", "white", "purple"}
 ROLES = {"novato", "pro", "estudiante", "admin", "docente"}
 IDS_FINAL = {"fcard", "fpro", "fnext"}
@@ -57,9 +57,10 @@ TIPOS: dict[str, tuple[set[str], set[str]]] = {
     "venn":    ({"id", "sets"}, {"labels", "title"}),
     "countdown": ({"id"}, {"seconds"}),
     "secuencia": ({"id", "partes", "mensajes"}, {"title"}),
+    "arbol":   ({"id", "nodos"}, {"title"}),
 }
 COMUNES = {"type", "gap", "align"}
-LAYOUT_DEL_COMPILADOR = {"fs", "w", "col", "fila"}   # si el LLM los pone, se ignoran
+LAYOUT_DEL_COMPILADOR = {"fs", "w", "col", "fila", "pos", "caja_h", "alto"}   # si el LLM los pone, se ignoran
 
 # Ancho útil de una estación (el motor centra en x±490; dejo margen)
 ANCHO_MAX = 960
@@ -70,7 +71,7 @@ PAUSA_BLOQUE = 0.4   # GAPS al final de cada bloque
 PAUSA_TARDIA = 1.0   # ... si lo último que aparece cae en las últimas palabras
 PAUSA_FRASE = 0.22   # voice.py: GAP por defecto
 
-# Diagramas (secuencia): un SVG dentro de una tarjeta, con estas medidas (engine.py las usa tal cual)
+# Diagramas (secuencia y árbol): un SVG dentro de una tarjeta, con estas medidas (engine.py las usa tal cual)
 DIAG_ANCHO = ANCHO_MAX - 80   # la tarjeta menos sus márgenes
 DIAG_FS = 40                  # letra más grande de un diagrama
 K_LETRA = 0.6                 # ancho medio de una letra de Inter 800, en proporción al fs
@@ -79,6 +80,12 @@ SEC_MENSAJES = (1, 7)
 SEC_NOMBRE_MAX = 14
 SEC_TEXTO_MAX = 20
 SEC_KINDS = {"good", "bad", "warn"}
+ARBOL_NODOS = (2, 10)
+ARBOL_TEXTO_MAX = 18
+ARBOL_NIVELES = 4
+ARBOL_HIJOS = 4
+ARBOL_GAP_X = 20              # separación mínima entre dos cajas vecinas
+ARBOL_GAP_Y = 70              # entre un nivel y el siguiente
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +273,12 @@ class Ids:
     consolas: set[str] = field(default_factory=set)
     dialogos: set[str] = field(default_factory=set)
     mensajes: dict[str, tuple[str, int]] = field(default_factory=dict)   # id-mK -> (id de la secuencia, K)
+    arboles: dict[str, dict[str, str | None]] = field(default_factory=dict)   # id del árbol -> {nodo: padre}
+    nodos: dict[str, str] = field(default_factory=dict)                  # id de nodo -> id de su árbol
 
 
 # ---------------------------------------------------------------------------
-# Diagramas: secuencia
+# Diagramas: secuencia y árbol
 # ---------------------------------------------------------------------------
 
 def _ancho(txt: str, fs: float) -> float:
@@ -364,6 +373,137 @@ def layout_secuencia(partes: list[dict[str, Any]], mensajes: list[dict[str, Any]
         rep.error(donde, f"{culpa} no entra en su columna ni con letra {FS_MIN}px "
                          f"({len(partes)} partes de {col:.0f}px): acortalo o usá menos partes")
     return fs, round(col, 1), fs + 64
+
+
+def layout_arbol(nodos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Árbol ordenado de arriba hacia abajo: las hojas (en orden de recorrido) espaciadas parejo, cada padre
+    centrado sobre sus hijos (sin cruces) y, si entra, la raíz en el centro del dibujo. Devuelve fs, caja_h, alto y
+    pos {nodo: [x, y, ancho]} dentro de un SVG de DIAG_ANCHO. fs < FS_MIN quiere decir que no entra."""
+    hijos: dict[str, list[str]] = {n["id"]: [] for n in nodos}
+    raiz = ""
+    for n in nodos:
+        if n.get("padre") is None:
+            raiz = n["id"]
+        else:
+            hijos[n["padre"]].append(n["id"])
+    por_id = {n["id"]: n for n in nodos}
+    hojas: list[str] = []
+    nivel: dict[str, int] = {}
+
+    def recorrer(i: str, d: int) -> None:
+        nivel[i] = d
+        if not hijos[i]:
+            hojas.append(i)
+        for h in hijos[i]:
+            recorrer(h, d + 1)
+    recorrer(raiz, 0)
+
+    def caja(n: dict[str, Any], fs: int) -> float:
+        return _ancho(n["text"], fs) + 0.9 * fs + 16 + (fs + 10 if n.get("icon") else 0)
+
+    niveles = max(nivel.values()) + 1
+
+    # posición de cada nodo en unidades de hoja: la hoja k en k + 0.5, cada padre al medio de sus hijos
+    u: dict[str, float] = {}
+
+    def poner(i: str) -> float:
+        if not hijos[i]:
+            u[i] = hojas.index(i) + 0.5
+        else:
+            us = [poner(c) for c in hijos[i]]
+            u[i] = (us[0] + us[-1]) / 2
+        return u[i]
+    poner(raiz)
+
+    def ubicar(fs: int, centrada: bool) -> dict[str, float]:
+        """x de cada nodo. centrada: la raíz en el centro del dibujo, con el mayor paso entre hojas que deja
+        todas las cajas adentro. Si no, las hojas reparten el ancho y el árbol se corre hacia el centro
+        hasta donde puede. El paso nunca pasa del ancho de la caja más ancha más un margen."""
+        paso = min(DIAG_ANCHO / len(hojas), max(caja(n, fs) for n in nodos) + 120)
+        if centrada:
+            for i, n in por_id.items():
+                d = abs(u[i] - u[raiz])
+                if d:
+                    paso = min(paso, (DIAG_ANCHO / 2 - caja(n, fs) / 2) / d)
+            return {i: DIAG_ANCHO / 2 + (u[i] - u[raiz]) * paso for i in u}
+        x = {i: (DIAG_ANCHO - paso * len(hojas)) / 2 + u[i] * paso for i in u}
+        izq = min(x[i] - caja(por_id[i], fs) / 2 for i in x)
+        der = max(x[i] + caja(por_id[i], fs) / 2 for i in x)
+        mover = max(-izq, min(DIAG_ANCHO - der, DIAG_ANCHO / 2 - x[raiz])) if izq >= 0 and der <= DIAG_ANCHO else 0
+        return {i: v + mover for i, v in x.items()}
+
+    def entra(fs: int, x: dict[str, float]) -> bool:
+        """Cada caja dentro del SVG y, en cada nivel, separada de su vecina por ARBOL_GAP_X."""
+        for d in range(niveles):
+            fila = sorted((x[i], caja(por_id[i], fs)) for i in nivel if nivel[i] == d)
+            if fila[0][0] - fila[0][1] / 2 < 0 or fila[-1][0] + fila[-1][1] / 2 > DIAG_ANCHO:
+                return False
+            if any(b[0] - a[0] < (a[1] + b[1]) / 2 + ARBOL_GAP_X for a, b in zip(fila, fila[1:])):
+                return False
+        return True
+
+    # primero con la raíz en el centro; si así no entra con letra legible, repartiendo las hojas en todo el ancho
+    for centrada in (True, False):
+        fs = DIAG_FS
+        x = ubicar(fs, centrada)
+        while fs >= FS_MIN and not entra(fs, x):
+            fs -= 1
+            x = ubicar(fs, centrada)
+        if fs >= FS_MIN:
+            break
+    h = round(fs * 1.25 + 26)
+    pos = {i: [round(x[i], 1), round(6 + h / 2 + nivel[i] * (h + ARBOL_GAP_Y), 1), round(caja(por_id[i], fs), 1)]
+           for i in hijos}
+    return {"fs": fs, "caja_h": h, "alto": 12 + niveles * h + (niveles - 1) * ARBOL_GAP_Y, "pos": pos}
+
+
+def validar_arbol(nodos: Any, donde: str, rep: Reporte) -> list[dict[str, Any]] | None:
+    """Exactamente una raíz, padres que existen, sin ciclos, hasta ARBOL_NIVELES niveles y ARBOL_HIJOS hijos."""
+    if not isinstance(nodos, list) or not ARBOL_NODOS[0] <= len(nodos) <= ARBOL_NODOS[1]:
+        rep.error(donde, f"un árbol lleva entre {ARBOL_NODOS[0]} y {ARBOL_NODOS[1]} nodos")
+        return None
+    out = []
+    for k, n in enumerate(nodos):
+        if not isinstance(n, dict) or not isinstance(n.get("id"), str) or not isinstance(n.get("text"), str):
+            rep.error(donde, f"el nodo {k} tiene que ser {{\"id\": …, \"text\": …, \"padre\": …}}")
+            return None
+        if len(n["text"]) > ARBOL_TEXTO_MAX:
+            rep.error(donde, f"el texto del nodo «{n['id']}» pasa de {ARBOL_TEXTO_MAX} caracteres")
+        if n.get("kind", "white") not in KINDS:
+            rep.error(donde, f"el nodo «{n['id']}»: kind «{n['kind']}» no existe")
+        for x in n.keys() - {"id", "text", "padre", "kind", "icon"}:
+            rep.aviso(donde, f"el nodo «{n['id']}»: clave «{x}» desconocida")
+        out.append({k2: v for k2, v in n.items() if k2 in ("id", "text", "padre", "kind", "icon")})
+    ids_ = [n["id"] for n in out]
+    if len(set(ids_)) != len(ids_):
+        return out          # el id repetido lo reporta nuevo_id
+    padre = {n["id"]: n.get("padre") for n in out}
+    raices = [i for i, p in padre.items() if p is None]
+    if len(raices) != 1:
+        rep.error(donde, f"tiene que haber exactamente una raíz (un nodo sin padre); hay {len(raices)}"
+                         + (f": {', '.join(raices)}" if raices else ""))
+        return None
+    for i, p in padre.items():
+        if p is not None and p not in padre:
+            rep.error(donde, f"el padre «{p}» del nodo «{i}» no es un nodo de este árbol")
+            return None
+    for i in padre:
+        visto, j = set(), i
+        while j is not None:
+            if j in visto:
+                rep.error(donde, f"hay un ciclo de padres que pasa por «{i}»")
+                return None
+            visto.add(j)
+            j = padre[j]
+        if len(visto) > ARBOL_NIVELES:
+            rep.error(donde, f"el nodo «{i}» está en el nivel {len(visto)}: un árbol tiene hasta {ARBOL_NIVELES} niveles")
+            return None
+    for i in padre:
+        n_hijos = sum(p == i for p in padre.values())
+        if n_hijos > ARBOL_HIJOS:
+            rep.error(donde, f"el nodo «{i}» tiene {n_hijos} hijos (máximo {ARBOL_HIJOS})")
+            return None
+    return out
 
 
 def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
@@ -546,6 +686,29 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
         out["fs"], out["col"], out["fila"] = layout_secuencia(partes, mensajes, donde, rep)
         if out["fs"] < FS_MIN:
             return None          # el error ya dice qué no entra
+    elif tipo == "arbol":
+        nodos = validar_arbol(e["nodos"], donde, rep)
+        if nodos is None:
+            return None
+        for n in nodos:
+            nuevo_id(n["id"])
+            ids.con_tachado.add(n["id"])
+            if n.get("icon"):
+                iconos.add(n["icon"])
+            if n.get("padre") is not None:
+                nuevo_id(f"{e['id']}-e-{n['id']}")
+        if len({n["id"] for n in nodos}) != len(nodos):
+            return None
+        ids.arboles[e["id"]] = {n["id"]: n.get("padre") for n in nodos}
+        ids.nodos.update({n["id"]: e["id"] for n in nodos})
+        out["nodos"] = nodos
+        out.update(layout_arbol(nodos))
+        if out["fs"] < FS_MIN:
+            hojas = sum(not any(m.get("padre") == n["id"] for m in nodos) for n in nodos)
+            largo = max(nodos, key=lambda n: len(n["text"]))["text"]
+            rep.error(donde, f"el árbol no entra en {ANCHO_MAX}px ni con letra {FS_MIN}px ({hojas} hojas lado a "
+                             f"lado; el texto más largo es «{largo}»): usá menos nodos (menos hojas) o textos más cortos")
+            return None
     elif tipo == "row":
         n = len(e["items"])
         maxw = (ANCHO_MAX - 24 * (n - 1)) / max(1, n)
@@ -627,7 +790,7 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
     anclas_final: dict[str, str] = {}
     total_palabras = 0
     hay_boom = False
-    mostrados: set[str] = set()     # mensajes que ya aparecieron (para avisar si salen de orden)
+    mostrados: set[str] = set()     # mensajes y nodos que ya aparecieron (para avisar si salen de orden)
     secciones = [(b, bl.get("frases", [])) for b, bl in enumerate(bloques)] + [("final", final.get("frases", []))]
     for b, frases in secciones:
         if not frases:
@@ -686,6 +849,9 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
     for mid in ids.mensajes:
         if mid not in mostrados:
             rep.aviso("guion", f"el mensaje {mid} nunca se muestra: poné {{show {mid}}} en la palabra que lo nombra")
+    for nid, tid in ids.nodos.items():
+        if ids.arboles[tid][nid] is not None and nid not in mostrados:
+            rep.aviso("guion", f"el nodo {nid} nunca aparece: poné {{show {nid}}} o recorrelo con {{ruta {tid} hasta=…}}")
     if not hay_boom:
         rep.aviso("guion", "no hay clímax marcado (ninguna acción boom)")
 
@@ -753,8 +919,20 @@ def chequear_fuentes(b: int, bloque: dict[str, Any], afirm: dict[str, Any], rep:
         rep.aviso(f"bloque {b}", f"no aparecen en sus fuentes (¿inventados?): {', '.join(sueltos)}")
 
 
+def camino_arbol(arbol: dict[str, str | None], hasta: str) -> list[str]:
+    """Los nodos desde la raíz hasta «hasta», en orden."""
+    out: list[str] = []
+    j: str | None = hasta
+    while j is not None:
+        out.insert(0, j)
+        j = arbol[j]
+    return out
+
+
 def chequear_orden(et: Etiqueta, ids: Ids, mostrados: set[str], donde: str, rep: Reporte) -> None:
-    """Los mensajes de una secuencia se leen en orden."""
+    """Los mensajes de una secuencia se leen en orden y un nodo cuelga de un padre que ya se ve."""
+    if et.accion == "ruta" and et.id in ids.arboles and et.extra.get("hasta") in ids.arboles[et.id]:
+        mostrados.update(camino_arbol(ids.arboles[et.id], et.extra["hasta"]))
     if et.accion != "show":
         return
     if et.id in ids.mensajes:
@@ -762,13 +940,17 @@ def chequear_orden(et: Etiqueta, ids: Ids, mostrados: set[str], donde: str, rep:
         if k > 0 and f"{sid}-m{k - 1}" not in mostrados:
             rep.aviso(donde, f"{et.id} se muestra antes que {sid}-m{k - 1}: los mensajes se leen en orden, "
                              "de arriba hacia abajo")
+    elif et.id in ids.nodos:
+        padre = ids.arboles[ids.nodos[et.id]][et.id]
+        if padre is not None and ids.arboles[ids.nodos[et.id]][padre] is not None and padre not in mostrados:
+            rep.aviso(donde, f"el nodo {et.id} aparece antes que su padre {padre}: mostrá primero el padre")
     mostrados.add(et.id)
 
 
 def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
     requisitos = {
-        "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo, big "
-                                    "o partes y mensajes de una secuencia"),
+        "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo, big, "
+                                    "partes o mensajes de una secuencia, o nodos de un árbol"),
         "swap": (ids.con_alt, "solo chips con «alt»"),
         "type": (ids.consolas, "solo consolas"),
         "point": (ids.dialogos, "solo diálogos"),
@@ -784,6 +966,19 @@ def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
         if len(str(et.extra.get("texto", ""))) > 12:
             rep.error(donde, "send: texto de más de 12 caracteres")
         return
+    if et.accion == "ruta":
+        arbol = ids.arboles.get(et.id)
+        if arbol is None:
+            rep.error(donde, f"ruta sobre «{et.id}»: solo árboles (arbol)")
+            return
+        hasta = et.extra.get("hasta")
+        if hasta not in arbol:
+            rep.error(donde, f"ruta: hasta={hasta} tiene que ser un nodo de «{et.id}» ({', '.join(arbol)})")
+        if "kind" in et.extra and et.extra["kind"] not in ("good", "bad"):
+            rep.error(donde, f"ruta: kind={et.extra['kind']} (puede ser good o bad)")
+        return
+    if "hasta" in et.extra:
+        rep.error(donde, f"hasta= solo va con ruta, no con {et.accion}")
     if et.accion in requisitos:
         validos, msg = requisitos[et.accion]
         if et.id not in validos:
