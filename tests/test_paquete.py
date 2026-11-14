@@ -64,7 +64,9 @@ def test_paquete_en_el_orden_de_temas_y_avisa_lo_que_falta(tmp_path, capsys):
     salida = capsys.readouterr().out
     archivo = t / "Bases-de-datos-&-co.s2s.json"        # el título de la lista, sin espacios
     p = json.loads(archivo.read_text(encoding="utf-8"))
-    assert set(p) == {"v", "titulo", "idioma", "generado", "videos"}
+    assert set(p) == {"v", "titulo", "idioma", "generado", "videos", "hecho_con"}
+    plugin = json.loads((RAIZ / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert p["hecho_con"] == plugin["version"]
     assert p["v"] == 2 and p["titulo"] == "Bases de datos & co" and p["idioma"] == "es"
     assert "T" in p["generado"] and p["generado"].endswith("+00:00")
     assert [x["id"] for x in p["videos"]] == ["t03", "t01"]
@@ -255,7 +257,7 @@ def test_la_app_rechaza_lo_que_no_es_un_paquete():
     codigos = [(x["codigo"], x["campo"]) for x in r[1:]]
     assert codigos == [
         ("no_es_json", ""), ("no_es_paquete", ""), ("no_es_paquete", ""), ("no_es_paquete", ""), ("no_es_paquete", ""),
-        ("version", "3"), ("version", "1"), ("campo", "titulo"), ("campo", "titulo"), ("campo", "idioma"),
+        ("version_nueva", "3"), ("version", "1"), ("campo", "titulo"), ("campo", "titulo"), ("campo", "idioma"),
         ("campo", "generado"),
         ("campo", "videos"), ("vacio", ""),
         ("campo", "videos[0].id"), ("campo", "videos[0].id"), ("campo", "videos[0].titulo"),
@@ -263,3 +265,37 @@ def test_la_app_rechaza_lo_que_no_es_un_paquete():
         ("campo", "videos[0].html"), ("campo", "videos[0].html"),
         ("repetido", "t01"),
     ]
+
+
+def mensajes_js(casos):
+    """Paquete.mensaje(Paquete.validar(d), idioma) para cada (paquete, idioma)."""
+    prog = (f"const PQ = require({json.dumps(str(PAQUETE_JS))});\n"
+            "let datos = ''; process.stdin.on('data', d => datos += d).on('end', () => {\n"
+            "  console.log(JSON.stringify(JSON.parse(datos).map(([d, i]) => PQ.mensaje(PQ.validar(d), i)))); });\n")
+    r = subprocess.run([NODE, "-e", prog], input=json.dumps(casos), capture_output=True, encoding="utf-8", timeout=30)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+@con_node
+def test_un_paquete_mas_nuevo_que_la_app_pide_actualizar_la_app_y_uno_viejo_pide_rearmarlo():
+    nuevo = {**V2, "v": 3, "hecho_con": "0.9.0"}
+    viejo = {**V1, "v": 0, "hecho_con": "0.1.0"}
+    r = mensajes_js([[nuevo, "es"], [nuevo, "en"], [viejo, "es"], [viejo, "en"],
+                     [{**V2, "v": 3}, "es"], [{**V2, "v": 3, "hecho_con": "<b>x</b>"}, "es"], [{**V2, "v": "2"}, "es"]])
+    assert r == [
+        "Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con internet para actualizarla."
+        " (Lo armó scroll-to-study 0.9.0.)",
+        "This package is from a newer version than the app. Close the app and open it with internet to update it."
+        " (Made by scroll-to-study 0.9.0.)",
+        "Este paquete es de una versión vieja (0) que la app ya no lee: armalo de nuevo con s2s.py paquete."
+        " (Lo armó scroll-to-study 0.1.0.)",
+        "This package is from an old version (0) the app no longer reads: make it again with s2s.py paquete."
+        " (Made by scroll-to-study 0.1.0.)",
+        # sin hecho_con (paquetes de antes) o con algo que no es una versión, sin la aclaración
+        "Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con internet para actualizarla.",
+        "Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con internet para actualizarla.",
+        "Este paquete es de una versión vieja (2) que la app ya no lee: armalo de nuevo con s2s.py paquete.",
+    ]
+    # un paquete que sirve, con hecho_con, se importa igual
+    assert validar_js([{**V2, "hecho_con": "0.4.2"}]) == [None]

@@ -3,7 +3,12 @@
  * Acepta v2 (cada video trae "preguntas") y v1 (de antes de las preguntas: se lee como si no tuviera).
  *
  * Función pura: no toca el DOM ni el almacenamiento. validar(d) devuelve null si el paquete sirve, o
- * { codigo, campo } con lo primero que falla; la app traduce el código a un mensaje.
+ * { codigo, campo } con lo primero que falla (y hecho_con, la versión de scroll-to-study que lo armó, si el
+ * paquete la trae); mensaje(error, idioma) lo dice para la persona.
+ *
+ * Versiones: un paquete con "v" mayor que la última que se acepta lo armó un plugin más nuevo que la app
+ * ("version_nueva": lo viejo es la app, que se actualiza abriéndola con internet); uno con "v" que ya no se
+ * acepta, o que no es un número, es "version" (lo viejo es el paquete: se arma de nuevo).
  *
  * Funciona suelto: con require() exporta las funciones; cargado en una página las deja en window.Paquete.
  */
@@ -19,6 +24,7 @@
   const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
   const esTexto = x => typeof x === "string";
   const mal = (codigo, campo) => ({ codigo, campo: campo || "" });
+  const ULTIMA = Math.max.apply(null, VERSIONES);
   const lleno = x => esTexto(x) && x.trim().length > 0;
 
   /** null si la pregunta sirve, o el nombre del campo que está mal. */
@@ -37,7 +43,11 @@
   function validar(d) {
     if (!d || typeof d !== "object" || Array.isArray(d)) return mal("no_es_paquete");
     if (!("v" in d) || !("videos" in d)) return mal("no_es_paquete");
-    if (!VERSIONES.includes(d.v)) return mal("version", String(d.v));
+    if (!VERSIONES.includes(d.v)) {
+      const e = mal(Number.isInteger(d.v) && d.v > ULTIMA ? "version_nueva" : "version", String(d.v));
+      if (esTexto(d.hecho_con) && /^[0-9A-Za-z.+-]{1,40}$/.test(d.hecho_con)) e.hecho_con = d.hecho_con;
+      return e;
+    }
     if (!esTexto(d.titulo) || !d.titulo.trim()) return mal("campo", "titulo");
     if (d.titulo.length > 200) return mal("campo", "titulo");
     if (!IDIOMAS.includes(d.idioma)) return mal("campo", "idioma");
@@ -86,5 +96,37 @@
     };
   }
 
-  return { VERSION, VERSIONES, validar, leer, metadatos };
+  const MENSAJES = {
+    es: {
+      no_es_json: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
+      no_es_paquete: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
+      version_nueva: "Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con internet para actualizarla.",
+      version: "Este paquete es de una versión vieja ({c}) que la app ya no lee: armalo de nuevo con s2s.py paquete.",
+      campo: "El paquete está dañado (falta o está mal «{c}»): armalo de nuevo con s2s.py paquete.",
+      vacio: "El paquete no tiene videos.",
+      repetido: "El paquete tiene el video «{c}» repetido: armalo de nuevo con s2s.py paquete.",
+      hecho_con: " (Lo armó scroll-to-study {h}.)",
+    },
+    en: {
+      no_es_json: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
+      no_es_paquete: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
+      version_nueva: "This package is from a newer version than the app. Close the app and open it with internet to update it.",
+      version: "This package is from an old version ({c}) the app no longer reads: make it again with s2s.py paquete.",
+      campo: "The package is damaged (“{c}” is missing or wrong): make it again with s2s.py paquete.",
+      vacio: "The package has no videos.",
+      repetido: "The package has the video “{c}” twice: make it again with s2s.py paquete.",
+      hecho_con: " (Made by scroll-to-study {h}.)",
+    },
+  };
+
+  /** El error de validar/leer, dicho para la persona en "es" o "en". */
+  function mensaje(error, idioma) {
+    const m = MENSAJES[idioma] || MENSAJES.es;
+    const e = error || {};
+    let s = (m[e.codigo] || m.no_es_paquete).replace("{c}", () => e.campo || "");
+    if ((e.codigo === "version" || e.codigo === "version_nueva") && e.hecho_con) s += m.hecho_con.replace("{h}", () => e.hecho_con);
+    return s;
+  }
+
+  return { VERSION, VERSIONES, validar, leer, metadatos, mensaje };
 });

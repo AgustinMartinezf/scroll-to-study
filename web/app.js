@@ -31,14 +31,6 @@
       importado: "Listo: «{t}», {n} videos guardados en este teléfono.",
       actualizado: "Se actualizó «{t}» ({n} videos). Tu progreso sigue igual.",
       espacio: "Ocupa {mb} en este teléfono",
-      err: {
-        no_es_json: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
-        no_es_paquete: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
-        version: "Este paquete es de otra versión ({c}): armalo de nuevo con s2s.py paquete.",
-        campo: "El paquete está dañado (falta o está mal «{c}»): armalo de nuevo con s2s.py paquete.",
-        vacio: "El paquete no tiene videos.",
-        repetido: "El paquete tiene el video «{c}» repetido: armalo de nuevo con s2s.py paquete.",
-      },
       lleno: "No hay lugar en el teléfono para guardar estos videos. Liberá espacio o borrá otra materia.",
       errGuardar: "No se pudieron guardar los videos ({c}).",
       errLeer: "No se pudo leer el archivo.",
@@ -68,14 +60,6 @@
       importado: "Done: “{t}”, {n} videos saved on this phone.",
       actualizado: "Updated “{t}” ({n} videos). Your progress is unchanged.",
       espacio: "Uses {mb} on this phone",
-      err: {
-        no_es_json: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
-        no_es_paquete: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
-        version: "This package is from another version ({c}): make it again with s2s.py paquete.",
-        campo: "The package is damaged (“{c}” is missing or wrong): make it again with s2s.py paquete.",
-        vacio: "The package has no videos.",
-        repetido: "The package has the video “{c}” twice: make it again with s2s.py paquete.",
-      },
       lleno: "There is no room on the phone for these videos. Free up some space or delete another set.",
       errGuardar: "Couldn't save the videos ({c}).",
       errLeer: "Couldn't read the file.",
@@ -270,7 +254,11 @@
     try { texto = await leerTexto(archivo); } catch (e) { error(TX.errLeer); return; }
     const r = PQ.leer(texto);
     texto = null;
-    if (r.error) { error(fmt(TX.err[r.error.codigo] || TX.err.no_es_paquete, { c: r.error.campo })); return; }
+    if (r.error) {
+      error(PQ.mensaje(r.error, IDIOMA));       // los mensajes de un paquete que no sirve están en paquete.js
+      if (r.error.codigo === "version_nueva") buscarVersionNueva();
+      return;
+    }
     const d = r.paquete;
     let habia;
     try {

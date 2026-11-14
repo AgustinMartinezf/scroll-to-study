@@ -223,6 +223,19 @@ def test_un_archivo_que_no_es_paquete_da_un_error_claro_y_no_guarda_nada(context
                               q.onsuccess = () => ok(q.result); }; })""") == 0
 
 
+def test_un_paquete_mas_nuevo_que_la_app_dice_que_se_actualice_la_app(contexto, sitio_url):
+    page = abrir(contexto(), sitio_url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    page.evaluate("""navigator.serviceWorker.getRegistration().then(r => {
+        window.pedidos = 0; const u = r.update.bind(r); r.update = () => { pedidos++; return u(); }; })""")
+    importar(page, dict(paquete(), v=99, hecho_con="9.9.9"))
+    page.wait_for_selector("#error:not([hidden])")
+    assert texto(page, "#error") == ("Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con "
+                                     "internet para actualizarla. (Lo armó scroll-to-study 9.9.9.)")
+    assert page.evaluate("window.pedidos") == 1                 # y ya busca la versión nueva
+    assert page.is_visible("#vacio")
+
+
 def test_varios_paquetes_reimportar_conserva_el_progreso_y_borrar(contexto, sitio_url):
     page = abrir(contexto(), sitio_url)
     importar(page, paquete())
