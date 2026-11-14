@@ -227,6 +227,53 @@ def test_el_video_no_tiene_filtros(video_real):
     assert "blur(" not in video_real.read_text(encoding="utf-8")
 
 
+# Capas de GPU: en iOS, cada elemento con una transformación 3D (o will-change) sobre un #world de ~2600x6500 px
+# escalado reserva memoria de GPU, y el proceso de la app se cae a mitad del video. Todo tiene que ser 2D.
+# Además del transform computado se mira el que puso gsap en línea: Chromium da translate3d(x, y, 0) como
+# matrix(...) 2D, pero WebKit igual le crea una capa.
+CAPAS_3D = """([D, paso]) => {
+  const malos = [];
+  const els = [document.getElementById("root"), ...document.querySelectorAll("#root *")];
+  for (let t = 0; t <= D + 1e-9; t += paso) {
+    window.__s2s.pintar(t);
+    for (const e of els) {
+      const cs = getComputedStyle(e);
+      const enLinea = (e.style && e.style.transform) || "";
+      if (cs.transform.startsWith("matrix3d") || cs.willChange !== "auto" || /3d\\(|translateZ|perspective/.test(enLinea))
+        malos.push(`${t.toFixed(2)} s: ${e.id || e.className.baseVal || e.className || e.tagName} ${enLinea || cs.transform} will-change:${cs.willChange}`);
+    }
+    if (malos.length > 20) break;
+  }
+  return malos;
+}"""
+
+
+def test_ningun_elemento_crea_una_capa_3d_en_toda_la_linea_de_tiempo(navegador, video_real):
+    p = navegador.new_page(viewport={"width": 390, "height": 693})
+    try:
+        p.goto(video_real.as_uri())
+        p.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=30000)
+        D = p.evaluate("window.__s2s.D")
+        assert p.evaluate(CAPAS_3D, [D, 0.25]) == []
+    finally:
+        p.close()
+
+
+def test_el_motor_no_pide_capas_3d():
+    """Lo que el video de prueba no usa (swap, por ejemplo) también tiene que ser 2D: se mira el código."""
+    import re
+    scripts = SKILL / "scripts"
+    js = (scripts / "engine.js").read_text(encoding="utf-8")
+    assert re.search(r"gsap\.config\(\{\s*force3D:\s*false\s*\}\)", js)
+    assert js.index("gsap.config(") < js.index("gsap.timeline(")
+    for f in [scripts / "engine.js", scripts / "engine.css", *sorted((scripts / "temas").glob("*.css"))]:
+        texto = f.read_text(encoding="utf-8")
+        for prohibido in ("will-change", "translateZ", "translate3d", "backface-visibility", "rotationX",
+                          "rotationY", "perspective", "force3D: true"):
+            assert prohibido not in texto, f"{f.name} usa {prohibido}"
+    assert "will-change" not in reproductor.PLAYER_CSS and "translate3d" not in reproductor.PLAYER_CSS
+
+
 # el estado de cada elemento (sus estilos en línea, con las propiedades en orden)
 ESTADO = """[...document.querySelectorAll("body *")].map(e => e.id + "|" +
   (e.getAttribute("style") || "").split(";").map(x => x.trim()).filter(Boolean).sort().join(";"))"""
@@ -249,9 +296,10 @@ COMPARAR = """async ([a, b]) => {
 def test_pintar_da_el_mismo_cuadro_llegue_como_llegue(navegador, video_real):
     """pintar(30) y después pintar(10) da el mismo cuadro que pintar(10) recién cargado, y lo mismo con tres
     tiempos al azar. "El mismo cuadro": cada elemento con exactamente los mismos estilos, y la captura igual
-    salvo el suavizado de bordes. Chromium a veces rasteriza las líneas finas de la grilla con otro suavizado
-    después de un cambio de escala (diferencias de hasta ~11 de 255 en esas líneas); un cuadro distinto
-    (algo corrido, otro texto encendido) da diferencias de más de 100."""
+    salvo el suavizado de bordes. Chromium a veces rasteriza las líneas finas de la grilla y el texto de los
+    subtítulos con otro suavizado después de un cambio de escala: sin capas 3D (force3D: false, por iOS) todo se
+    rasteriza junto y las letras dan diferencias de hasta ~50 de 255 en sus bordes. Un cuadro distinto (algo
+    corrido, otro texto encendido) da diferencias de más de 100."""
     import base64
 
     def pagina():
@@ -277,7 +325,7 @@ def test_pintar_da_el_mismo_cuadro_llegue_como_llegue(navegador, video_real):
             estado_b, png_b = cuadro(directo, t)
             assert estado_a == estado_b, f"pintar({antes}) y luego pintar({t}): otros estilos"
             d = directo.evaluate(COMPARAR, [png_a, png_b])
-            assert d["mismo_tamano"] and d["max"] <= 24, f"pintar({antes}) y luego pintar({t}): {d}"
+            assert d["mismo_tamano"] and d["max"] <= 64, f"pintar({antes}) y luego pintar({t}): {d}"
         finally:
             directo.close()
     ida.close()

@@ -1,4 +1,8 @@
 const D = S.D, CX = 540, CY = 960, C = S.C;   // C: colores del estilo (temas/*.json)
+// Solo transformaciones 2D. Por defecto gsap usa una traslación 3D mientras un tween está a mitad de camino, y en
+// iOS cada una de esas capas de GPU sobre el #world (~2600x6500 px, escalado) reserva memoria: a los 15-20 s
+// la app entera se cae y se recarga. Va antes de crear cualquier tween.
+gsap.config({ force3D: false });
 const tl = gsap.timeline({ paused: true });
 const $ = s => document.getElementById(s);
 const W = $("world");
@@ -187,8 +191,8 @@ S.EV.forEach(e => {
       tl.to(pk, { opacity: 0, scale: 0.5, duration: 0.2 }, t + 0.1 + dur);
       tl.fromTo(a, { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1 }, t + 0.1 + dur - 0.05);
       break; }
-    case "swap": { const a = $(id + "-alt");
-      tl.fromTo(a, { opacity: 0, rotationX: -90 }, { opacity: 1, rotationX: 0, duration: 0.35, ease: "back.out(1.6)" }, t); break; }
+    case "swap": { const a = $(id + "-alt");   // el giro es un scaleY (2D): girar en X crearía una capa 3D
+      tl.fromTo(a, { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.35, ease: "back.out(1.6)" }, t); break; }
     case "type": { const lines = [...el.querySelectorAll(".tyl")]; const tot = lines.reduce((s, l) => s + +l.dataset.n, 0); let tt = t; const dur = x.dur || 1.6;
       lines.forEach(l => { const n = +l.dataset.n, d = dur * n / tot; tl.fromTo(l, { width: 0 }, { width: n * 27.7 + 8, duration: d, ease: `steps(${n})` }, tt); tt += d; }); break; }
     case "shake": tl.fromTo(q(id), { x: 0 }, { x: 18, duration: 0.05, yoyo: true, repeat: 7, ease: "none" }, t); break;
