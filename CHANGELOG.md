@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-14
+
+### Fixed
+
+- The phone app now updates without deleting it from the home screen. It looks for a new version when
+  it opens and every time it comes back to the foreground, and shows "There is a new version of the
+  app" with an "Update" button. It never reloads by itself while a video plays.
+- A new version of the app could keep old files for up to 10 minutes after a deploy (GitHub Pages lets
+  browsers cache them): the app's offline copy is now always downloaded fresh.
+- A package made by a newer plugin than the app said to make the package again; it now says to open the
+  app with internet to update it, and starts looking for the update. Packages now say which version of
+  scroll-to-study made them ("hecho_con"), and that version shows in both version errors.
+- Closing the app, or the playlist on the computer, halfway through a video now offers "Resume from
+  m:ss" when it is opened again (within 12 hours). It is no longer recorded as a cut: only an
+  unannounced close (iOS out of memory) is.
+
+### Added
+
+- The app shows its version, small, at the bottom.
+
 ## [0.4.1] - 2026-11-14
 
 ### Fixed
@@ -119,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.2.0...v0.3.0
