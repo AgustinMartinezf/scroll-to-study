@@ -4,39 +4,39 @@
    "fuentes": ["A1"],
    "comprobar": [],
    "elementos": [
-    {"type": "flow", "id": "net", "items": [{"id": "c0", "text": "client", "icon": "users"}, {"id": "s0", "text": "server"}]},
+    {"type": "chip", "id": "tres", "text": "3 messages before the first byte", "kind": "blue"},
     {"type": "chip", "id": "q", "text": "Why are two not enough?", "kind": "warn", "icon": "question"},
     {"type": "countdown", "id": "cd", "seconds": 3}
    ],
    "frases": [
-    "Before sending a single byte of data, {show net}TCP exchanges [+three] messages.",
+    "Before sending a single byte of data, TCP exchanges {show tres}[+three] messages.",
     "Client and server have to agree on something first.",
     "Think about it: why are {show q}just two messages not {show cd}enough?"
    ]
   },
   {
-   "fuentes": ["A2", "A3"],
+   "fuentes": ["A2", "A3", "A4"],
    "comprobar": [],
    "elementos": [
     {"type": "chip", "id": "isn", "text": "each side picks its sequence number", "kind": "blue"},
-    {"type": "flow", "id": "hs", "items": [{"id": "c1", "text": "client", "icon": "users"}, {"id": "s1", "text": "server"}]}
+    {"type": "secuencia", "id": "hs", "title": "TCP handshake", "partes": [{"nombre": "client", "icon": "users"}, "server"],
+     "mensajes": [["client", "server", "SYN"], ["server", "client", "SYN-ACK"], ["client", "server", "ACK", {"kind": "good"}]]}
    ],
    "frases": [
     "The key is the {show isn}[+sequence] number: each side picks its own.",
-    "The client {show hs}sends a {send hs de=c1 a=s1 texto=SYN}SYN with its initial number.",
-    "The server answers {send hs de=s1 a=c1 texto=SYN-ACK}with a SYN-ACK: it confirms that number and sends its own."
+    "The client {show hs}sends a {show hs-m0}SYN with its initial number.",
+    "The server answers {show hs-m1}with a SYN-ACK: it confirms that number and sends its own.",
+    "One is missing: the client {show hs-m2}sends an ACK and {hl hs-m2}confirms the server's number."
    ]
   },
   {
    "fuentes": ["A4", "A5"],
    "comprobar": [],
    "elementos": [
-    {"type": "flow", "id": "f3", "items": [{"id": "c2", "text": "client", "icon": "users"}, {"id": "s2", "text": "server"}]},
     {"type": "chip", "id": "dos", "text": "did the server's number arrive?", "kind": "bad", "icon": "warning"},
     {"type": "big", "id": "b", "text": "2 numbers confirmed"}
    ],
    "frases": [
-    "One is missing: the client {show f3}sends an {send f3 de=c2 a=s2 texto=ACK}ACK and confirms the server's number.",
     "With only two, the server would not know if its number {show dos}[-arrived].",
     "With three, {show b}{boom b +0.3}both numbers are [+confirmed]."
    ]

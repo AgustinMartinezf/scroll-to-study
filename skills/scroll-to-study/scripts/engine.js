@@ -61,6 +61,45 @@ document.querySelectorAll(".bfill").forEach(e => gsap.set(e, { scaleX: 0 }));
 document.querySelectorAll(".vlab").forEach(e => gsap.set(e, { opacity: 0 }));
 document.querySelectorAll(".msg .mtxt").forEach(e => gsap.set(e, { opacity: 0 }));
 document.querySelectorAll(".msg").forEach(e => { if (!HID.has(e.id)) gsap.set(e, { opacity: 0 }); });
+// diagramas (secuencia y árbol, en SVG): los trazos se dibujan con strokeDashoffset y se colorean por atributo
+const largo = p => p.getTotalLength();
+// un trazo sin dibujar queda además transparente: con la punta redonda, un trazo de largo 0 deja un punto
+const trazar = (p, t, dur) => { const L = largo(p);
+  tl.fromTo(p, { strokeDashoffset: L, opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: dur, ease: "power2.out" }, t); };
+document.querySelectorAll(".dlin, .dbase, .druta, .dstk").forEach(p => { const L = largo(p); gsap.set(p, { strokeDasharray: L, strokeDashoffset: L, opacity: 0 }); });
+document.querySelectorAll(".dmsg").forEach(m => {   // los mensajes arrancan ocultos y aparecen de a uno
+  gsap.set(m, { opacity: 0 });
+  m.querySelectorAll(".dcab, .dcorte, .dlab").forEach(x => gsap.set(x, { opacity: 0 }));
+});
+document.querySelectorAll(".dnodo[data-padre]").forEach(n => gsap.set(n, { opacity: 0 }));   // del árbol se ve la raíz
+const esDiagrama = el => el instanceof SVGElement && ["dparte", "dmsg", "dnodo"].some(c => el.classList.contains(c));
+function dibujarMsg(m, t) {
+  tl.fromTo(m, { opacity: 0 }, { opacity: 1, duration: 0.05 }, t);
+  trazar(m.querySelector(".dlin"), t, 0.45);
+  const cab = m.querySelector(".dcab"), corte = m.querySelector(".dcorte");
+  if (cab) tl.fromTo(cab, { opacity: 0 }, { opacity: 1, duration: 0.12 }, t + 0.4);
+  if (corte) tl.fromTo(corte, { opacity: 0, scale: 1.8, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, t + 0.42);
+  tl.fromTo(m.querySelector(".dlab"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, t + 0.45);
+}
+function aparecerNodo(n, t) {   // primero la arista que llega, después la caja
+  const ar = n.dataset.padre ? $(n.dataset.arbol + "-e-" + n.id) : null;
+  if (ar) trazar(ar.querySelector(".dbase"), t, 0.35);
+  tl.fromTo(n, { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, t + (ar ? 0.3 : 0));
+}
+function colorear(el, t, fondo, tinta, linea) {   // hl, good, bad y ruta sobre una parte, un mensaje o un nodo
+  if (el.classList.contains("dmsg")) {
+    tl.to(el.querySelectorAll(".dlin"), { attr: { stroke: linea }, duration: 0.25 }, t);
+    tl.to(el.querySelectorAll(".dcab"), { attr: { fill: linea }, duration: 0.25 }, t);
+    tl.to(el.querySelector(".dlab .dfondo"), { attr: { fill: fondo }, duration: 0.25 }, t);
+    tl.to(el.querySelector(".dlab .dtxt"), { attr: { fill: tinta }, duration: 0.25 }, t);
+  } else {
+    tl.to(el.querySelector(".dfondo"), { attr: { fill: fondo }, duration: 0.25 }, t);
+    tl.to(el.querySelector(".dtxt"), { attr: { fill: tinta }, duration: 0.25 }, t);
+    const ic = el.querySelector(".dico"); if (ic) tl.to(ic, { color: tinta, duration: 0.25 }, t);
+  }
+  tl.fromTo(el, { scale: 1 }, { scale: 1.08, transformOrigin: "50% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
+}
+const aparecido = new Set();   // nodos que una ruta ya hizo aparecer
 // apariciones compuestas
 function rodar(el, t) {
   el.querySelectorAll(".dg").forEach((d, i) => tl.fromTo(d.querySelector(".dcol"), { yPercent: 0 },
@@ -143,6 +182,10 @@ S.EV.forEach(e => {
       else if (cls.contains("counter")) { tl.fromTo(q(id), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.7)" }, t); rodar(el, t); }
       else if (cls.contains("bar")) { tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.2 }, t); crecer(el, t); }
       else if (cls.contains("msg")) escribir(el, t);
+      else if (cls.contains("dmsg")) dibujarMsg(el, t);
+      else if (cls.contains("dnodo")) { aparecerNodo(el, t); aparecido.add(id); }
+      else if (cls.contains("darista")) trazar(el.querySelector(".dbase"), t, 0.35);
+      else if (cls.contains("dparte")) tl.fromTo(q(id), { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, t);
       else if (cls.contains("card")) {
         tl.fromTo(q(id), { opacity: 0, y: 110, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" }, t);
         if (cls.contains("chart")) el.querySelectorAll(".bar").forEach((b, i) => { if (!HID.has(b.id)) crecer(b, t + 0.35 + i * 0.15); });
@@ -154,24 +197,28 @@ S.EV.forEach(e => {
       break; }
     case "hide": tl.to(q(id), { opacity: 0, scale: 0.6, duration: 0.25, ease: "power3.in" }, t); break;
     case "hl": if (isReg(id)) { region(id, t, C.regionHl, 0.75); break; }
+      if (esDiagrama(el)) { colorear(el, t, C.hl, C.hlInk, C.ruta); break; }
       tl.to(q(id), { backgroundColor: x.bg || C.hl, color: x.color || C.hlInk, duration: 0.25 }, t);
       tl.fromTo(q(id), { scale: 1 }, { scale: 1.08, duration: 0.15, yoyo: true, repeat: 1 }, t); break;
     case "good":
-      if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaBien, duration: 0.25 }, t); tl.fromTo(q(id + "-ok"), { opacity: 0, scale: 2, rotation: -30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
+      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaBien : C.good, el.classList.contains("dmsg") ? C.celdaBien : C.goodInk, C.celdaBien);
+      else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaBien, duration: 0.25 }, t); tl.fromTo(q(id + "-ok"), { opacity: 0, scale: 2, rotation: -30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaBien, backgroundColor: C.filaBien, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.celdaBien, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaBien, duration: 0.25 }, t); }
       else if (isReg(id)) region(id, t, C.good, 0.75);
       else tl.to(q(id), { backgroundColor: C.good, color: C.goodInk, duration: 0.25 }, t);
       break;
     case "bad":
-      if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaMal, duration: 0.25 }, t); tl.to(q(id + "-ok"), { opacity: 0, duration: 0.1 }, t); tl.fromTo(q(id + "-no"), { opacity: 0, scale: 2, rotation: 30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
+      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaMal : C.bad, el.classList.contains("dmsg") ? C.celdaMal : C.badInk, C.celdaMal);
+      else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaMal, duration: 0.25 }, t); tl.to(q(id + "-ok"), { opacity: 0, duration: 0.1 }, t); tl.fromTo(q(id + "-no"), { opacity: 0, scale: 2, rotation: 30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaMal, backgroundColor: C.filaMal, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.bad, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaMal, duration: 0.25 }, t); }
       else if (isReg(id)) { region(id, t, C.bad, 0.7); break; }
       else tl.to(q(id), { backgroundColor: C.bad, color: C.badInk, duration: 0.25 }, t);
       tl.fromTo(q(id), { x: 0 }, { x: 22, duration: 0.05, yoyo: true, repeat: 7, ease: "none" }, t);
       break;
-    case "strike": tl.to(el.querySelector(":scope > .sk"), { scaleX: 1, duration: 0.3, ease: "power3.out" }, t);
+    case "strike": if (el instanceof SVGElement) el.querySelectorAll(".dstk").forEach(k => trazar(k, t, 0.3));
+      else tl.to(el.querySelector(":scope > .sk"), { scaleX: 1, duration: 0.3, ease: "power3.out" }, t);
       tl.to(q(id), { opacity: 0.75, duration: 0.3 }, t + 0.1); break;
     case "send": {   // un paquete viaja de una caja del flujo a otra (y vuelve a desaparecer)
       const cajas = [...el.querySelectorAll(".fbox")];
@@ -190,6 +237,27 @@ S.EV.forEach(e => {
       tl.fromTo(pk, { y: 0 }, { y: -40, duration: dur / 2, ease: "sine.out", yoyo: true, repeat: 1 }, t + 0.1);
       tl.to(pk, { opacity: 0, scale: 0.5, duration: 0.2 }, t + 0.1 + dur);
       tl.fromTo(a, { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1 }, t + 0.1 + dur - 0.05);
+      break; }
+    case "ruta": {   // de la raíz hasta un nodo: cada arista y cada nodo del camino se resaltan de a uno
+      const camino = []; for (let n = $(x.hasta); n; n = n.dataset.padre ? $(n.dataset.padre) : null) camino.unshift(n);
+      const fondo = x.kind === "good" ? C.good : (x.kind === "bad" ? C.bad : C.ruta);
+      const tinta = x.kind === "good" ? C.goodInk : (x.kind === "bad" ? C.badInk : C.rutaInk);
+      const paso = 0.3;
+      camino.forEach((n, k) => {
+        const tk = t + k * paso;
+        if (k > 0) {
+          const ar = $(id + "-e-" + n.id), sobre = ar.querySelector(".druta");
+          // si el nodo todavía no se ve, la ruta lo hace aparecer
+          if (!aparecido.has(n.id) && !S.EV.some(e => e.a === "show" && e.id === n.id && e.t <= tk)) {
+            trazar(ar.querySelector(".dbase"), tk - paso, paso * 0.8);
+            tl.fromTo(n, { opacity: 0 }, { opacity: 1, duration: 0.15 }, tk - 0.05);
+            aparecido.add(n.id);
+          }
+          tl.set(sobre, { attr: { stroke: fondo } }, tk - paso);
+          tl.fromTo(sobre, { strokeDashoffset: largo(sobre), opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: paso * 0.9, ease: "power1.inOut" }, tk - paso);
+        }
+        colorear(n, tk, fondo, tinta, fondo);
+      });
       break; }
     case "swap": { const a = $(id + "-alt");   // el giro es un scaleY (2D): girar en X crearía una capa 3D
       tl.fromTo(a, { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.35, ease: "back.out(1.6)" }, t); break; }

@@ -1,0 +1,41 @@
+{
+ "bloques": [
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "secuencia", "id": "sq", "title": "Validar una respuesta", "partes": [{"nombre": "resolver", "icon": "magnifying-glass"}, "raíz", {"nombre": "zona .com", "icon": "key"}],
+     "mensajes": [["resolver", "raíz", "pide DS de .com"], ["raíz", "resolver", "DS firmado", {"kind": "good"}],
+                  [0, 2, "pide DNSKEY"], [2, 0, "DNSKEY", {"perdido": true}], [0, 2, "pide de nuevo"], [2, 0, "DNSKEY firmada", {"kind": "good"}], [0, 0, "compara hash"]]}
+   ],
+   "frases": ["¿Cómo sabe el {show sq}resolver que una respuesta no fue falsificada?",
+              "Primero le {show sq-m0}pide a la raíz el registro DS de punto com.",
+              "La raíz {show sq-m1}contesta con el DS {good sq-m1 +0.6}firmado.",
+              "Después le {show sq-m2}pide la clave a la zona, y la respuesta {show sq-m3}se pierde.",
+              "Entonces {show sq-m4}pregunta de nuevo y {show sq-m5}llega {hl sq-m5 +0.5}firmada.",
+              "Al final {show sq-m6}compara el hash con el DS de la {hl sq-p1}raíz."]},
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "arbol", "id": "ar", "title": "Cadena de confianza", "nodos": [
+      {"id": "n-raiz", "text": "raíz .", "icon": "shield-check"},
+      {"id": "n-com", "text": ".com", "padre": "n-raiz"}, {"id": "n-org", "text": ".org", "padre": "n-raiz"}, {"id": "n-uy", "text": ".uy", "padre": "n-raiz"},
+      {"id": "n-ej", "text": "ejemplo.com", "padre": "n-com"}, {"id": "n-tienda", "text": "tienda.com", "padre": "n-com"},
+      {"id": "n-www", "text": "www", "padre": "n-ej", "kind": "blue"}, {"id": "n-api", "text": "api", "padre": "n-ej"},
+      {"id": "n-edu", "text": "edu.uy", "padre": "n-uy"}, {"id": "n-pago", "text": "pago", "padre": "n-tienda"}]}
+   ],
+   "frases": ["La confianza {show ar}baja desde la raíz, que todos conocen.",
+              "Debajo están {show n-com}punto com, {show n-org}punto org y {show n-uy}punto uy.",
+              "Punto com delega en {show n-ej}ejemplo y en {show n-tienda}tienda, y punto uy en {show n-edu}edu.",
+              "Ejemplo firma {show n-www}www y {show n-api}api, y tienda firma {show n-pago}pago.",
+              "Para validar www, el resolver {ruta ar hasta=n-www kind=good}sigue la cadena desde arriba.",
+              "Si la firma de tienda {bad n-tienda}falla, esa rama {strike n-tienda}queda afuera."]},
+  {"fuentes": [], "comprobar": [], "elementos": [
+    {"type": "arbol", "id": "ar2", "nodos": [{"id": "b8", "text": "8"}, {"id": "b3", "text": "3", "padre": "b8"}, {"id": "b10", "text": "10", "padre": "b8"},
+      {"id": "b1", "text": "1", "padre": "b3"}, {"id": "b6", "text": "6", "padre": "b3"}, {"id": "b14", "text": "14", "padre": "b10"}]},
+    {"type": "chip", "id": "cmp", "text": "3 comparaciones", "kind": "good"}
+   ],
+   "frases": ["En un árbol binario de búsqueda {show ar2}se baja igual.",
+              "Están el {show b3}tres, el {show b10}diez, el {show b1}uno y el {show b14}catorce.",
+              "Buscar el seis es {ruta ar2 hasta=b6}ir a la izquierda y después a la derecha.",
+              "Fueron {show cmp}{boom cmp +0.3}tres comparaciones."]}
+ ],
+ "final": {"frases": ["Para el examen, [+acordate]: {show fl1}la cadena baja desde la raíz.", "{show fnext}Mañana: rotación de claves."],
+  "lineas": ["la <b>cadena</b> baja desde la raíz"], "mañana": "rotación de claves"},
+ "lexico": {"ds": "de~ese"}
+}

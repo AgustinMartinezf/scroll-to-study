@@ -2,9 +2,10 @@
 
 Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.
 It works to **understand a project** (code, report, assignment brief) and to **study a course** for an
-exam (notes, slides, exercises): tables, chats, charts, formulas and protocols that
-animate right when the voice names them. Videos in English or Spanish. It is a **Claude Code** plugin:
-you use it with your own Claude, and everything stays on your computer.
+exam (notes, slides, exercises): tables, chats, charts, formulas, sequence diagrams for protocols
+and trees for hierarchies and chains that animate right when the voice names them. Videos in English
+or Spanish. It is a **Claude Code** plugin: you use it with your own Claude, and everything stays on
+your computer.
 
 The difference from other "study by scrolling" tools: **every quote is checked by code, and Claude
 reviews that the quote supports the statement**. Claude proposes statements with a verbatim quote and

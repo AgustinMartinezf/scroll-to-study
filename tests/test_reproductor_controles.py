@@ -275,6 +275,39 @@ def test_ningun_elemento_crea_una_capa_3d_en_toda_la_linea_de_tiempo(navegador, 
         p.close()
 
 
+@pytest.fixture(scope="module", params=["cuaderno", "pizarra"])
+def video_diagramas(request, tmp_path_factory):
+    """El video de prueba de los diagramas (secuencia con un mensaje perdido, árbol con ruta) en cada estilo."""
+    from pathlib import Path
+    gsap = Path(CFG["gsap"])
+    if not gsap.exists():
+        if EXIGIR:
+            pytest.fail(f"falta {gsap}: el job web del CI lo baja antes de los tests")
+        pytest.skip("gsap no está instalado (s2s.py instalar)")
+    g = json.loads((SKILL.parents[1] / "tests" / "fixtures" / "guion_diagramas.json").read_text(encoding="utf-8"))
+    lex = {**json.loads((SKILL / "scripts" / "lexico.json").read_text(encoding="utf-8")), **g["lexico"]}
+    spec, rep = compilar(g, lex)
+    assert rep.errores == []
+    d = tmp_path_factory.mktemp("diagramas") / "t01"
+    escribir_salidas(d, spec)
+    generar(d)
+    subprocess.run([sys.executable, str(SKILL / "scripts" / "engine.py"), str(d), request.param], check=True,
+                   capture_output=True, env={**os.environ, "S2S_DATOS": str(d.parent / "datos")})
+    return reproductor.construir(d, d.parent / "t01.html", "Diagramas")
+
+
+def test_los_diagramas_no_crean_capas_3d_en_toda_la_linea_de_tiempo(navegador, video_diagramas):
+    """Secuencia y árbol (flechas que se dibujan, un mensaje perdido, rutas, strike) también son 2D."""
+    p = navegador.new_page(viewport={"width": 390, "height": 693})
+    try:
+        p.goto(video_diagramas.as_uri())
+        p.wait_for_selector("html[data-s2s-listo]", state="attached", timeout=30000)
+        D = p.evaluate("window.__s2s.D")
+        assert p.evaluate(CAPAS_3D, [D, 0.25]) == []
+    finally:
+        p.close()
+
+
 def test_el_motor_no_pide_capas_3d():
     """Lo que el video de prueba no usa (swap, por ejemplo) también tiene que ser 2D: se mira el código."""
     import re
