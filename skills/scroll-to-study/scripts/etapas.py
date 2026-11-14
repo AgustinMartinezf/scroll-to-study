@@ -129,8 +129,9 @@ def _lista_afirmaciones(afirm: list[dict[str, Any]], idioma: str) -> str:
 
 
 def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str, modo: str = "proyecto",
-                 idioma: str = "es") -> str:
-    """El pedido de un guion: el tema y SOLO sus afirmaciones verificadas."""
+                 idioma: str = "es", validados: dict[str, tuple[str, list[list[str]]]] | None = None) -> str:
+    """El pedido de un guion: el tema y SOLO sus afirmaciones verificadas. validados (de guiones_validados)
+    agrega qué formato y qué elementos usaron los videos anteriores de la lista, para no repetirlos."""
     idx = next(i for i, t in enumerate(temas) if t["id"] == tema_id)
     tema = temas[idx]
     afirm = _afirmaciones_del_tema(inv, tema)
@@ -143,7 +144,16 @@ def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str,
             "elementos; elegí los elementos que mejor muestren TU contenido)\n"
             f"Tema: {tema['titulo']}\n{m['pregunta']}: {tema['pregunta']}\n"
             f"Tema de mañana: {manana}\nCIERRE: {m['cierre']}\n\nAfirmaciones disponibles:\n"
-            + _lista_afirmaciones(afirm, idioma))
+            + _lista_afirmaciones(afirm, idioma) + _videos_anteriores(temas[:idx], validados or {}))
+
+
+def _videos_anteriores(antes: list[dict[str, Any]], validados: dict[str, tuple[str, list[list[str]]]]) -> str:
+    lineas = [f"- {t['id']} {validados[t['id']][0]}: {resumen_escenas(validados[t['id']][1])}"
+              for t in antes if t["id"] in validados]
+    if not lineas:
+        return ""
+    return ("\n\nEarlier videos in this playlist (format: element types per block, | between blocks):\n"
+            + "\n".join(lineas) + "\n" + REGLA_VARIEDAD)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +215,87 @@ def avisos_iconos(guion: dict[str, Any], afirm: list[dict[str, Any]]) -> list[st
                 if ic in ICONOS_BD:
                     avisos.append(f"bloque {b} ({e.get('type')} {e.get('id')}): el ícono {ic} no tiene que ver "
                                   "con este tema; sacalo o elegí otro")
+    return avisos
+
+
+# ---------------------------------------------------------------------------
+# variedad: cada guion sabe qué usaron los videos anteriores de la lista
+# ---------------------------------------------------------------------------
+
+# acciones que cambian cómo se ve una escena (un paquete que viaja, un chip que se da vuelta, algo tachado):
+# entran en el resumen junto a los tipos de elemento, como «flow+send»
+ACCIONES_DE_ESCENA = ("send", "swap", "strike")
+REGLA_VARIEDAD = ("Do not open with the same element as the previous video, and do not repeat the exact "
+                  "combination of element types of any earlier video.")
+
+
+def escenas(guion: dict[str, Any]) -> list[list[str]]:
+    """Por bloque, los tipos de elemento en orden (sin repetir) y después las acciones de escena que usa."""
+    out = []
+    for bloque in guion.get("bloques", []):
+        tipos: list[str] = []
+        for e in bloque.get("elementos", []):
+            t = e.get("type") if isinstance(e, dict) else None
+            if isinstance(t, str) and t not in tipos:
+                tipos.append(t)
+        for f in bloque.get("frases", []):
+            for acc in re.findall(r"\{\s*([a-z]+)", f if isinstance(f, str) else ""):
+                if acc in ACCIONES_DE_ESCENA and acc not in tipos:
+                    tipos.append(acc)
+        out.append(tipos)
+    return out
+
+
+def resumen_escenas(esc: list[list[str]]) -> str:
+    """«chat | flow+send | big»: un bloque por tramo."""
+    return " | ".join("+".join(b) for b in esc)
+
+
+def guion_validado(carpeta: Path) -> dict[str, Any] | None:
+    """El guion.json de T/tNN si s2s.py guion lo validó sin errores y no cambió después (la huella del
+    reporte coincide; los reportes de antes de guardar la huella valen si hay spec.json)."""
+    carpeta = Path(carpeta)
+    guion, reporte = carpeta / "guion.json", carpeta / "reporte.json"
+    if not guion.exists() or not reporte.exists() or not (carpeta / "spec.json").exists():
+        return None
+    try:
+        rep, datos = leer(reporte), leer(guion)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(rep, dict) or rep.get("errores") or not isinstance(datos, dict):
+        return None
+    if "huella" in rep and rep["huella"] != huella(guion):
+        return None
+    return datos
+
+
+def guiones_validados(t: Path, temas: list[dict[str, Any]], inv: dict[str, Any],
+                      modo: str) -> dict[str, tuple[str, list[list[str]]]]:
+    """{tema: (formato, escenas)} de los temas con guion validado, en el orden de la lista."""
+    out = {}
+    for tema in temas:
+        g = guion_validado(Path(t) / tema["id"])
+        if g is not None:
+            out[tema["id"]] = (elegir_formato(tema, _afirmaciones_del_tema(inv, tema), modo), escenas(g))
+    return out
+
+
+def avisos_variedad(tema_id: str, esc: list[list[str]], temas: list[dict[str, Any]],
+                    validados: dict[str, tuple[str, list[list[str]]]]) -> list[str]:
+    """AVISO si el video abre con el mismo tipo de elemento que el anterior de la lista (el último tema
+    antes de este con guion validado), o si repite la combinación exacta de otro video de la lista."""
+    orden = [t["id"] for t in temas]
+    otros = {i: v for i, v in validados.items() if i != tema_id}
+    avisos = []
+    antes = orden[:orden.index(tema_id)] if tema_id in orden else []
+    anterior = next((i for i in reversed(antes) if i in otros), None)
+    if anterior and esc and esc[0] and otros[anterior][1] and otros[anterior][1][0][:1] == esc[0][:1]:
+        avisos.append(f"variedad: abre con {esc[0][0]}, igual que el video anterior ({anterior}); "
+                      "empezá con otro elemento")
+    for i, (formato, e) in otros.items():
+        if e == esc:
+            avisos.append(f"variedad: repite la combinación de elementos de {i} ({resumen_escenas(e)}); "
+                          "cambiá los elementos de algún bloque")
     return avisos
 
 

@@ -147,3 +147,70 @@ def test_icono_database_en_un_tema_de_bases_de_datos(tmp_path, capsys):
     bd[0]["texto"] = "La tabla conexion guarda los tres mensajes: SYN, SYN-ACK y ACK."
     codigo, out = correr_guion(trabajo(tmp_path, bd), "t01", guion_redes("database"), capsys)
     assert codigo == 0 and "no tiene que ver" not in out
+
+
+# ---------------------------------------------------------------------------
+# memoria de los videos anteriores
+# ---------------------------------------------------------------------------
+
+def con_contador(g):
+    """El mismo guion de Redes con un counter en vez del big: abre igual, pero la combinación cambia."""
+    g["bloques"][1]["elementos"] = [{"type": "counter", "id": "b", "value": "3", "label": "mensajes"}]
+    return g
+
+
+def abre_con_chip(g):
+    g["bloques"][0]["elementos"].insert(0, {"type": "chip", "id": "q", "text": "¿Cuántos mensajes?", "kind": "warn"})
+    g["bloques"][0]["frases"].insert(0, "Una {show q}pregunta.")
+    return g
+
+
+def pedido(t, tema, capsys):
+    import s2s
+    capsys.readouterr()
+    assert s2s.main(["pedido", "-t", str(t), "--tema", tema]) == 0
+    return capsys.readouterr().out
+
+
+def test_el_pedido_resume_los_videos_anteriores(tmp_path, capsys):
+    from etapas import REGLA_VARIEDAD
+    t = trabajo(tmp_path)
+    assert "Earlier videos" not in pedido(t, "t01", capsys)              # el primero no tiene anteriores
+    assert correr_guion(t, "t01", guion_redes(None), capsys)[0] == 0
+    assert correr_guion(t, "t02", con_contador(guion_redes(None)), capsys)[0] == 0
+    out = pedido(t, "t03", capsys)
+    assert "Earlier videos in this playlist" in out and REGLA_VARIEDAD in out
+    assert "- t01 pregunta: flow+send | big\n" in out and "- t02 pregunta: flow+send | counter\n" in out
+    assert "t02" not in pedido(t, "t02", capsys).split("Earlier videos")[1]   # solo los anteriores
+    # un guion editado después de validarlo ya no cuenta: no se sabe qué elementos va a usar
+    g = json.loads((t / "t01" / "guion.json").read_text(encoding="utf-8")); g["bloques"][1]["frases"][0] += " Listo."
+    (t / "t01" / "guion.json").write_text(json.dumps(g, ensure_ascii=False), encoding="utf-8")
+    out = pedido(t, "t03", capsys)
+    assert "- t01" not in out and "- t02 pregunta" in out
+
+
+def test_avisos_de_variedad(tmp_path, capsys):
+    t = trabajo(tmp_path)
+    _, out = correr_guion(t, "t01", guion_redes(None), capsys)
+    assert "variedad" not in out
+    codigo, out = correr_guion(t, "t02", con_contador(guion_redes(None)), capsys)
+    assert codigo == 0                                                    # avisos, no errores
+    assert "AVISO      variedad: abre con flow, igual que el video anterior (t01); empezá con otro elemento" in out
+    assert "repite la combinación" not in out
+    _, out = correr_guion(t, "t03", guion_redes(None), capsys)
+    assert "igual que el video anterior (t02)" in out
+    assert "variedad: repite la combinación de elementos de t01 (flow+send | big)" in out
+    _, out = correr_guion(t, "t03", abre_con_chip(guion_redes(None)), capsys)
+    assert "variedad" not in out
+    # validar de nuevo un tema no lo compara consigo mismo
+    _, out = correr_guion(t, "t01", guion_redes(None), capsys)
+    assert "repite la combinación" not in out
+
+
+def test_el_registro_guarda_los_elementos_de_cada_guion_validado(tmp_path, capsys):
+    t = trabajo(tmp_path)
+    malo = guion_redes(None); malo["bloques"][0]["frases"][0] = "Hola {volar hs}mundo."
+    correr_guion(t, "t01", malo, capsys)
+    correr_guion(t, "t01", guion_redes(None), capsys)
+    guiones = [json.loads(l) for l in (t / "registro.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [g.get("elementos") for g in guiones if g["cmd"] == "guion"] == [None, [["flow", "send"], ["big"]]]

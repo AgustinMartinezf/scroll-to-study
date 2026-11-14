@@ -41,7 +41,7 @@ sys.path.insert(0, str(AQUI))
 
 import fuentes                                      # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
-from etapas import (IDIOMAS, MODOS, aplicar_respaldo, avisos_iconos, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
+from etapas import (IDIOMAS, MODOS, aplicar_respaldo, avisos_iconos, avisos_variedad, escenas, guiones_validados, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
                     huella, leer, modo_de, preguntas_listas, textos,
                     pedido_guion, pedido_preguntas, pedido_respaldo, validar_guion, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
                     resumen_inventario, separar_errores)
@@ -277,8 +277,9 @@ def cmd_temas(a: argparse.Namespace) -> int:
 
 
 def cmd_pedido(a: argparse.Namespace) -> int:
-    print(pedido_guion(leer(a.trabajo / "inventario.json"), leer(a.trabajo / "temas.json")["temas"], a.tema,
-                       modo_de(a.trabajo), idioma_de(a.trabajo)))
+    t = a.trabajo
+    inv, temas = leer(t / "inventario.json"), leer(t / "temas.json")["temas"]
+    print(pedido_guion(inv, temas, a.tema, modo_de(t), idioma_de(t), guiones_validados(t, temas, inv, modo_de(t))))
     return 0
 
 
@@ -292,10 +293,16 @@ def cmd_guion(a: argparse.Namespace) -> int:
         spec, errores, avisos = validar_guion(guion, inv, idioma_de(t), modo_de(t))
         tema = _tema(t, a.tema)
         avisos += avisos_iconos(guion, [x for x in inv["afirmaciones"] if x["id"] in tema.get("afirmaciones", [])])
+        esc = escenas(guion)
+        temas = leer(t / "temas.json")["temas"]
+        avisos += avisos_variedad(a.tema, esc, temas, guiones_validados(t, temas, inv, modo_de(t)))
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
-        spec, errores, avisos = {}, [f"el JSON no se pudo leer: {e}"], []
+        spec, errores, avisos, esc = {}, [f"el JSON no se pudo leer: {e}"], [], []
     arreglar, preguntar = separar_errores(errores)
-    escribir(carpeta / "reporte.json", {"errores": errores, "avisos": avisos, "intentos": intento})
+    # la huella dice qué versión de guion.json se validó: el pedido de los temas siguientes solo cuenta
+    # los guiones que no cambiaron después de validarlos
+    escribir(carpeta / "reporte.json", {"errores": errores, "avisos": avisos, "intentos": intento,
+                                        "huella": huella(carpeta / "guion.json")})
     for m in avisos: print("AVISO     ", m)
     for m in arreglar: print("ARREGLAR  ", m)
     for m in preguntar: print("PREGUNTAR ", m)
@@ -304,7 +311,10 @@ def cmd_guion(a: argparse.Namespace) -> int:
         print(f"ok en el intento {intento}: {len(spec['PHRASES'])} frases, ~{spec['DURACION_ESTIMADA']}s")
     elif arreglar and intento >= MAX_INTENTOS:
         print(f"\nYa van {intento} intentos: no sigas corrigiendo este tema; contale a la persona y pasá al siguiente.")
-    registrar(t, "guion", tema=a.tema, intento=intento, errores=len(arreglar), preguntar=len(preguntar), ok=not errores)
+    # por guion validado, los tipos de elemento de cada bloque: para medir después la variedad
+    extra = {"elementos": esc} if not errores else {}
+    registrar(t, "guion", tema=a.tema, intento=intento, errores=len(arreglar), preguntar=len(preguntar),
+              ok=not errores, **extra)
     return 0 if not errores else 1
 
 
