@@ -54,3 +54,11 @@ def test_gesto_umbral_de_80_px_y_velocidad_minima():
                           R.gesto(0, -79, 50), R.gesto(0, -200, 2000), R.gesto(150, -100, 80), R.gesto(30, 0, 50)];""")
     # toque; arriba = siguiente; abajo = anterior; corto; lento; de costado; ni toque ni gesto
     assert r == [80, "toque", "siguiente", "anterior", None, None, None, None]
+
+
+def test_leer_marca_de_sonando_descarta_lo_que_no_entiende():
+    bueno = {"video": "t02", "t": 25.4, "fecha": "2026-11-13T10:00:00Z"}
+    casos = [json.dumps(bueno), dict(bueno, extra=1), "no es json", None, dict(bueno, t=-1), dict(bueno, video=""),
+             {"video": "t01", "t": 3}]
+    r = correr(f"return {json.dumps(casos)}.map(R.leerMarca);")
+    assert r == [bueno, bueno, None, None, None, None, None]

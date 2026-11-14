@@ -56,10 +56,10 @@ html { touch-action:manipulation; }   /* sin zoom por doble toque: el doble toqu
 """
 
 TEXTOS = {
-    "es": {"tocar": "Tocar para ver", "seguir": "Seguir", "otraVez": "Ver de nuevo", "cargando": "Cargando…",
+    "es": {"tocar": "Tocar para ver", "seguir": "Seguir", "seguirDesde": "Seguir desde {t}", "otraVez": "Ver de nuevo", "cargando": "Cargando…",
            "error": "No se pudo reproducir", "barra": "Posición del video",
            "sub": "Un video por día, en orden. Cada uno prepara una pregunta que te pueden hacer."},
-    "en": {"tocar": "Tap to play", "seguir": "Resume", "otraVez": "Watch again", "cargando": "Loading…",
+    "en": {"tocar": "Tap to play", "seguir": "Resume", "seguirDesde": "Resume from {t}", "otraVez": "Watch again", "cargando": "Loading…",
            "error": "Couldn't play", "barra": "Video position",
            "sub": "One video a day, in order. Each one prepares a question you may get."},
 }
@@ -273,7 +273,7 @@ PLAYER_JS = """
   // La lista de reproducción (index.html) pide arrancar el siguiente video (si el navegador exige un
   // toque, queda la tapa) o pausar, o pasa un toque o una tecla que le llegó a ella. "play" con "desde"
   // retoma un video que se recargó solo: aunque el navegador exija un toque, la tapa queda en "Seguir"
-  // en ese punto.
+  // en ese punto. "ir" lo deja quieto en t, con "Seguir desde m:ss" (la app entera se cortó: no arranca sola).
   addEventListener("message", e => {
     const m = e.data;
     if (!m) return;
@@ -284,6 +284,11 @@ PLAYER_JS = """
       reproducir().catch(() => {});
     }
     if (m.s2s === "pausa") pausar();
+    if (m.s2s === "ir" && !sonando && typeof m.t === "number" && isFinite(m.t) && m.t > 0) {
+      pos = acotar(m.t); pintar(pos);
+      const mmss = `${Math.floor(pos / 60)}:${String(Math.floor(pos % 60)).padStart(2, "0")}`;
+      boton.textContent = (TX.seguirDesde || TX.seguir + " {t}").replace("{t}", mmss);
+    }
     if (m.s2s === "toque" && typeof m.x === "number") tocar(m.x);
     if (m.s2s === "tecla" && typeof m.tecla === "string") tecla(m.tecla);
     if (m.s2s === "feed") { feed = !!m.activo; tapa.style.touchAction = feed ? "none" : ""; }
@@ -496,6 +501,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 <script>__REPRODUCCION__</script>
 <script>
 const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso, C = window.Cuestionario;
+window.Reproduccion.prepararAudio(document);   // el audio suena con el iPhone en modo silencio (reproduccion.js)
 const IDIOMA = document.documentElement.lang, QX = C.textos(IDIOMA);
 const CLAVE = "s2s:" + document.title, hoy = () => P.fechaLocal(new Date());
 let st = P.vacio(VIDEOS);
@@ -547,7 +553,7 @@ let quiz = null;
 // sin gestos sobre el video, y "Pantalla completa" (feed), donde se desliza entre videos: reproduccion.js
 const R = window.Reproduccion.conectar({
   iframe: v, caja: document.querySelector(".caja"), botonFeed: $("feed"), idioma: IDIOMA,
-  claveCortes: () => "s2s-cortes:" + document.title,
+  claveCortes: () => "s2s-cortes:" + document.title, claveMarca: () => "s2s-marca:" + document.title,
   hay: d => pos(st.cur) + d >= 0 && pos(st.cur) + d < VIDEOS.length, mover: d => abrir(pos(st.cur) + d, true),
   alFin: visto => { if (visto) terminoVideo(); },
 });
@@ -570,11 +576,11 @@ function preguntar(x) {
     alSaltear: () => { quiz = null; seguirConLoQueToca(); },   // no cuenta como respuesta: ya quedó visto
   });
 }
-function abrir(i, auto) {
+function abrir(i, auto, desde) {
   if (i < 0 || i >= VIDEOS.length) return;
   cerrarQuiz();
   st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
-  R.cargar(VIDEOS[i].id, auto); v.src = VIDEOS[i].archivo; pintar();
+  R.cargar(VIDEOS[i].id, auto, desde); v.src = VIDEOS[i].archivo; pintar();
 }
 // cuando el video termina (y sonó al menos el 70 %): queda visto y vienen sus preguntas, o el siguiente
 function terminoVideo() {
@@ -621,8 +627,12 @@ $("cero").onclick = () => {
   no.onclick = () => caja.remove();
   caja.append(q, si, no); $("cero").after(caja);
 };
+// si la página se cerró sola con un video sonando (reproduccion.js), se anota el corte y se abre ese video quieto
+// donde iba, con "Seguir desde m:ss"; si no, lo que toca hoy (o el último, si no queda nada)
+const corte = R.corteAnterior(id => VIDEOS.some(x => x.id === id));
 const inicial = P.queTocaHoy(st, VIDEOS, hoy());
-abrir(pos(inicial === null ? st.cur : inicial), false);   // se abre lo que toca hoy (o el último, si no queda nada)
+if (corte) abrir(pos(corte.video), false, corte.t);
+else abrir(pos(inicial === null ? st.cur : inicial), false);
 </script>
 </body></html>
 """

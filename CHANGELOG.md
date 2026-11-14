@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-14
+
+### Fixed
+
+- On iPhone, the installed app closed and reloaded itself 10 to 20 seconds into a video. The
+  animations created a GPU layer for every element that moved, on top of the large scaled scene, until
+  iOS ran out of memory; videos now use only 2D transforms.
+- On iPhone, the videos' sound only played with silent mode off. The app and the playlist now ask iOS
+  for the "playback" audio session themselves (asking only from inside the video was not enough) and,
+  on the first tap, start a silent audio loop so the sound plays in silent mode on older iOS versions too.
+- When the whole app reloads mid-video, the cut is now recorded in "cortes" (it stayed empty, because
+  only reloads of the video's page were detected), and the app opens that video paused where it was,
+  with "Resume from m:ss". It does not play on its own.
+- Videos made by an earlier version keep their old player: remake them with
+  `s2s.py videos --todo -t scroll-to-study` (and the phone package with `s2s.py paquete`) to get these
+  fixes.
+
 ## [0.4.0] - 2026-11-13
 
 ### Added
@@ -102,7 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.1.0...v0.2.0

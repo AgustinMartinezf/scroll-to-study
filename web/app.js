@@ -15,6 +15,9 @@
 (function () {
   "use strict";
   const P = window.Progreso, PQ = window.Paquete, C = window.Cuestionario;
+  // que el audio de los videos suene con el iPhone en modo silencio (reproduccion.js): también se pide dentro
+  // del video, pero en la app instalada lo que cuenta es la página principal
+  window.Reproduccion.prepararAudio(document);
 
   const TEXTOS = {
     es: {
@@ -233,8 +236,13 @@
     document.title = actual.titulo;
     $("titulo").textContent = actual.titulo;
     pintarApp();
+    // si la app se cerró sola con un video sonando (en el iPhone, sin memoria se recarga entera), se anota el
+    // corte y se abre ese video quieto donde iba, con "Seguir desde m:ss" (reproduccion.js); si no, lo que
+    // toca hoy (o el último, si no queda nada)
+    const corte = R.corteAnterior(id => VIDEOS.some(x => x.id === id));
+    if (corte) { abrir(pos(corte.video), false, corte.t); return; }
     const inicial = P.queTocaHoy(st, VIDEOS, hoy());
-    abrir(pos(inicial === null ? st.cur : inicial), false);   // lo que toca hoy (o el último, si no queda nada)
+    abrir(pos(inicial === null ? st.cur : inicial), false);
   }
 
   async function recargar(titulo) {
@@ -335,7 +343,8 @@
   // reproduccion.js, igual que en la lista de la compu
   const R = window.Reproduccion.conectar({
     iframe: v, caja: document.querySelector(".caja"), botonFeed: $("feed"), idioma: IDIOMA,
-    claveCortes: () => "s2s-cortes:" + actual.titulo, activo: () => !!actual,
+    claveCortes: () => "s2s-cortes:" + actual.titulo, claveMarca: () => "s2s-marca:" + actual.titulo,
+    activo: () => !!actual,
     hay: d => pos(st.cur) + d >= 0 && pos(st.cur) + d < VIDEOS.length, mover: d => abrir(pos(st.cur) + d, true),
     alFin: visto => { if (visto) terminoVideo(); },
   });
@@ -368,7 +377,7 @@
     if (urlActual) { URL.revokeObjectURL(urlActual); urlActual = null; }
   }
 
-  async function abrir(i, auto) {
+  async function abrir(i, auto, desde) {
     if (!actual || i < 0 || i >= VIDEOS.length) return;
     cerrarQuiz();
     st = Object.assign({}, st, { cur: VIDEOS[i].id }); guardar();
@@ -379,7 +388,7 @@
     if (mio !== turno) return;                     // mientras tanto se pidió otro video
     if (typeof html !== "string") { error(TX.errVideo); return; }
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    R.cargar(VIDEOS[i].id, auto);
+    R.cargar(VIDEOS[i].id, auto, desde);
     v.src = url;
     if (urlActual) URL.revokeObjectURL(urlActual);  // la anterior ya no la usa nadie
     urlActual = url;
