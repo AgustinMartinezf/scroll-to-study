@@ -158,7 +158,9 @@ def test_modo_feed_deslizar_cambia_de_video_y_la_x_vuelve_a_la_lista(navegador, 
     caja = page.query_selector(".caja").bounding_box()
     assert (caja["x"], caja["y"], caja["width"], caja["height"]) == (0, 0, 390, 844)      # toda la pantalla
     assert page.evaluate("getComputedStyle(document.documentElement).overflow") == "hidden"
-    assert f.evaluate("window.recibidos").count({"s2s": "feed", "activo": True}) == 1      # el video sabe del modo
+    # el video sabe del modo (postMessage llega después, no en el mismo click)
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'feed' && m.activo === true)")
+    assert f.evaluate("window.recibidos").count({"s2s": "feed", "activo": True}) == 1
     sonar(f)
     page.wait_for_selector(".s2s-capa.activa")
     # la capa deja libre la franja de abajo, donde está la barra del video
