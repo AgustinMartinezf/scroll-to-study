@@ -17,12 +17,13 @@
    "fuentes": ["A2"],
    "comprobar": [],
    "elementos": [
-    {"type": "row", "id": "comp", "items": [{"id": "pa", "text": "padre", "kind": "blue"}, {"id": "hi", "text": "hijo", "kind": "purple"}]},
+    {"type": "arbol", "id": "proc", "title": "Procesos", "nodos": [{"id": "pa", "text": "padre", "kind": "blue"},
+      {"id": "h1", "text": "hijo 1", "padre": "pa", "kind": "purple"}, {"id": "h2", "text": "hijo 2", "padre": "pa", "kind": "purple"}]},
     {"type": "chip", "id": "pag", "text": "mismas páginas, solo lectura", "kind": "neutral", "icon": "lock"}
    ],
    "frases": [
-    "Después del fork, {show comp}padre e hijo [+comparten] las mismas páginas de memoria.",
-    "Todavía no se copió nada.",
+    "Después del fork, {show proc}padre e {show h1}hijo [+comparten] las mismas páginas de memoria.",
+    "Con otro fork {show h2}nace otro hijo, y todavía no se copió nada.",
     "El sistema las marca como de {show pag}solo lectura."
    ]
   },

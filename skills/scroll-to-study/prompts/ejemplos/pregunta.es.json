@@ -4,39 +4,39 @@
    "fuentes": ["A1"],
    "comprobar": [],
    "elementos": [
-    {"type": "flow", "id": "net", "items": [{"id": "c0", "text": "cliente", "icon": "users"}, {"id": "s0", "text": "servidor"}]},
+    {"type": "chip", "id": "tres", "text": "3 mensajes antes del primer dato", "kind": "blue"},
     {"type": "chip", "id": "q", "text": "¿Por qué no alcanzan dos?", "kind": "warn", "icon": "question"},
     {"type": "countdown", "id": "cd", "seconds": 3}
    ],
    "frases": [
-    "Antes de mandar un solo dato, {show net}TCP intercambia [+tres] mensajes.",
+    "Antes de mandar un solo dato, TCP intercambia {show tres}[+tres] mensajes.",
     "Cliente y servidor tienen que ponerse de acuerdo en algo.",
     "Pensalo: ¿por qué no alcanzan {show q}solo dos {show cd}mensajes?"
    ]
   },
   {
-   "fuentes": ["A2", "A3"],
+   "fuentes": ["A2", "A3", "A4"],
    "comprobar": [],
    "elementos": [
     {"type": "chip", "id": "isn", "text": "cada lado elige su número de secuencia", "kind": "blue"},
-    {"type": "flow", "id": "hs", "items": [{"id": "c1", "text": "cliente", "icon": "users"}, {"id": "s1", "text": "servidor"}]}
+    {"type": "secuencia", "id": "hs", "title": "Saludo de TCP", "partes": [{"nombre": "cliente", "icon": "users"}, "servidor"],
+     "mensajes": [["cliente", "servidor", "SYN"], ["servidor", "cliente", "SYN-ACK"], ["cliente", "servidor", "ACK", {"kind": "good"}]]}
    ],
    "frases": [
     "La clave es el {show isn}[+número] de secuencia: cada lado elige el suyo.",
-    "El cliente {show hs}manda un {send hs de=c1 a=s1 texto=SYN}SYN con su número inicial.",
-    "El servidor contesta {send hs de=s1 a=c1 texto=SYN-ACK}con un SYN-ACK: confirma ese número y manda el suyo."
+    "El cliente {show hs}manda un {show hs-m0}SYN con su número inicial.",
+    "El servidor contesta {show hs-m1}con un SYN-ACK: confirma ese número y manda el suyo.",
+    "Falta el tercero: el cliente {show hs-m2}manda un ACK y {hl hs-m2}confirma el número del servidor."
    ]
   },
   {
    "fuentes": ["A4", "A5"],
    "comprobar": [],
    "elementos": [
-    {"type": "flow", "id": "f3", "items": [{"id": "c2", "text": "cliente", "icon": "users"}, {"id": "s2", "text": "servidor"}]},
     {"type": "chip", "id": "dos", "text": "¿llegó el número del servidor?", "kind": "bad", "icon": "warning"},
     {"type": "big", "id": "b", "text": "2 números confirmados"}
    ],
    "frases": [
-    "Falta el tercero: el cliente {show f3}manda un {send f3 de=c2 a=s2 texto=ACK}ACK y confirma el número del servidor.",
     "Con solo dos, el servidor no sabría si su número {show dos}[-llegó].",
     "Con tres, {show b}{boom b +0.3}los dos números quedan [+confirmados]."
    ]

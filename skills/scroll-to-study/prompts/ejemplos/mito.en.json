@@ -17,12 +17,13 @@
    "fuentes": ["A2"],
    "comprobar": [],
    "elementos": [
-    {"type": "row", "id": "comp", "items": [{"id": "pa", "text": "parent", "kind": "blue"}, {"id": "hi", "text": "child", "kind": "purple"}]},
+    {"type": "arbol", "id": "proc", "title": "Processes", "nodos": [{"id": "pa", "text": "parent", "kind": "blue"},
+      {"id": "h1", "text": "child 1", "padre": "pa", "kind": "purple"}, {"id": "h2", "text": "child 2", "padre": "pa", "kind": "purple"}]},
     {"type": "chip", "id": "pag", "text": "same pages, read-only", "kind": "neutral", "icon": "lock"}
    ],
    "frases": [
-    "After the fork, {show comp}parent and child [+share] the same memory pages.",
-    "Nothing has been copied yet.",
+    "After the fork, {show proc}parent and {show h1}child [+share] the same memory pages.",
+    "Another fork {show h2}makes another child, and nothing has been copied yet.",
     "The system {show pag}marks them as read-only."
    ]
   },

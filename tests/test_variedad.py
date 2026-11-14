@@ -39,7 +39,8 @@ def test_los_ejemplos_validan_sin_errores(formato, idioma):
     if formato != "historia":                                 # solo el de la biblioteca es de Bases de Datos
         assert "table" not in tipos
         assert not {"database", "table"} & {ic for b in g["bloques"] for e in b["elementos"] for ic in iconos_de(e)}
-    requisitos = {"pregunta": {"flow", "countdown"} <= tipos and "send" in acciones,
+    requisitos = {"pregunta": {"secuencia", "countdown"} <= tipos,        # el saludo de TCP es un intercambio
+                  "mito": "arbol" in tipos,                                  # procesos padre e hijos
                   "avsb": bool({"formula", "venn"} & tipos),
                   "pasos": bool({"console", "list"} & tipos)}
     assert requisitos.get(formato, True)
