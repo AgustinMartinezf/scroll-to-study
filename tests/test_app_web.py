@@ -9,6 +9,7 @@ fallan en vez de saltearse."""
 import functools
 import json
 import os
+import shutil
 import threading
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -69,6 +70,44 @@ def sitio_url(tmp_path_factory):
     srv.shutdown()
 
 
+class _Cacheable(_Callado):
+    """Como GitHub Pages: deja que el navegador guarde cada archivo 10 minutos en su caché HTTP."""
+    def send_head(self):
+        # http.server compara fechas al segundo: A y B se arman en el mismo segundo y daría 304 sin serlo
+        del self.headers["If-Modified-Since"]
+        return super().send_head()
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "max-age=600")
+        super().end_headers()
+
+
+@pytest.fixture
+def sitio_cambiante(tmp_path, monkeypatch):
+    """Un _site/ servido con Cache-Control: max-age=600 que se puede volver a armar en el mismo puerto.
+    Devuelve (url, publicar): publicar(marca) arma el sitio con una línea más en app.js que deja
+    window.S2S_SITIO = marca, como un deploy nuevo."""
+    d = tmp_path / "_site"
+    web = tmp_path / "web"
+
+    def publicar(marca):
+        if web.exists():
+            shutil.rmtree(web)
+        shutil.copytree(sitio.WEB_ORIGINAL, web)
+        app = web / "app.js"
+        app.write_text(app.read_text(encoding="utf-8") + f"\nwindow.S2S_SITIO = {json.dumps(marca)};\n",
+                       encoding="utf-8")
+        monkeypatch.setattr(sitio, "WEB", web)
+        sitio.armar(d)
+
+    monkeypatch.setattr(sitio, "WEB_ORIGINAL", sitio.WEB, raising=False)
+    publicar("A")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_Cacheable, directory=str(d)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}/", publicar
+    srv.shutdown()
+
+
 @pytest.fixture(scope="module")
 def navegador():
     try:
@@ -116,6 +155,16 @@ def frame_del_video(page, vid):
                     pass
         page.wait_for_timeout(100)
     raise AssertionError(f"no apareció el video {vid}")
+
+
+def esperar(page, js, arg=None, segundos=15):
+    """Como wait_for_function, pero para una función async (wait_for_function no espera la promesa)."""
+    for _ in range(segundos * 10):
+        r = page.evaluate(js, arg)
+        if r:
+            return r
+        page.wait_for_timeout(100)
+    raise AssertionError(f"no pasó: {js}")
 
 
 def importar(page, d, **kw):
@@ -231,6 +280,27 @@ def test_abre_sin_conexion_desde_el_service_worker(contexto, sitio_url):
     # una pestaña nueva, también sin red
     otra = abrir(ctx, sitio_url)
     assert texto(otra, "#titulo") == "Redes"
+
+
+def test_la_cache_nueva_del_service_worker_no_sale_de_la_cache_http(contexto, sitio_cambiante):
+    """GitHub Pages deja cachear 10 minutos: la caché de una versión nueva tiene que tener los archivos nuevos,
+    no los que el navegador guardó de la anterior."""
+    url, publicar = sitio_cambiante
+    page = abrir(contexto(), url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    assert page.evaluate("window.S2S_SITIO") == "A"
+    # el navegador ya tiene app.js de A en su caché HTTP (max-age=600)
+    assert "S2S_SITIO = \"A\"" in page.evaluate("fetch('app.js', { cache: 'force-cache' }).then(r => r.text())")
+    viejas = page.evaluate("caches.keys()")
+    publicar("B")
+    page.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")
+    # la versión nueva se instala en una caché propia (con todos los archivos) y borra la vieja
+    texto_app = esperar(page, """async vs => {
+        const ks = await caches.keys();
+        if (ks.length !== 1 || vs.includes(ks[0])) return null;
+        const r = await (await caches.open(ks[0])).match('app.js');
+        return r ? r.text() : null; }""", viejas)
+    assert "S2S_SITIO = \"B\"" in texto_app and "S2S_SITIO = \"A\"" not in texto_app
 
 
 def test_iphone_sin_instalar_explica_como_instalarla(contexto, sitio_url):

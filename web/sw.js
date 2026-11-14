@@ -3,6 +3,10 @@
  *
  * tools/sitio.py reemplaza __VERSION__ (una huella de todos los archivos del sitio) y la lista de
  * ARCHIVOS al armar _site/: cada cambio publicado es una caché nueva, y al activarse se borran las viejas.
+ *
+ * Al instalar, cada archivo se pide con cache: "reload", sin pasar por la caché HTTP del navegador: GitHub
+ * Pages deja cachear unos 10 minutos, y con addAll(ARCHIVOS) una caché "nueva" podía quedar con archivos
+ * viejos hasta el próximo deploy.
  */
 "use strict";
 const VERSION = "__VERSION__";
@@ -11,7 +15,9 @@ const CACHE = PREFIJO + VERSION;
 const ARCHIVOS = ["./", /*__ARCHIVOS__*/];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE)
+    .then(c => c.addAll(ARCHIVOS.map(url => new Request(url, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
