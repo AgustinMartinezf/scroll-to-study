@@ -153,6 +153,14 @@ player; your videos never go there. You import them from a file and they stay st
 The app asks the browser to keep its storage (so the phone does not clear it when it runs low on
 space) and shows how much it uses.
 
+**Updating the app.** There is nothing to reinstall: open the app with internet and it looks for a new
+version (also every time you come back to it). When one is ready, a notice "There is a new version of
+the app" appears with an "Update" button; tap it and the app reloads with the new version. It never
+reloads by itself, so a video that is playing is not cut. The version you are running shows, small, at
+the bottom. If a package says it is from a newer version than the app, close the app and open it again
+with internet. If you close the app halfway through a video, it offers "Resume from m:ss" when you
+come back (within 12 hours).
+
 **Controls.** They are the same in the app and in the playlist on your computer:
 
 - Tap the video to pause or resume.
@@ -194,7 +202,7 @@ and needs `playwright` (`pip install playwright`, then `playwright install chrom
   it; that the quote actually *supports* the statement is Claude's own review, not a mechanical check.
   A wrong call there is possible, so in a project you confirm the doubtful ones and in a course they
   are dropped.
-- Tested in Chromium. Safari on iPhone (including the phone app) needs more testing.
+- Tested in Chromium and, installed on the home screen, in Safari on iPhone.
 
 ## Development
 

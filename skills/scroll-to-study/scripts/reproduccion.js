@@ -36,12 +36,15 @@
  * diagnóstico (localStorage, aparte del progreso, con tope de TOPE_CORTES). "Exportar progreso" lo incluye
  * como "cortes". Nada sale del navegador.
  *
- * Cortes de la app entera: en el iPhone, cuando se acaba la memoria se recarga la página principal y no solo el
- * iframe, así que no llega ningún segundo "listo". Por eso, mientras un video suena, cada "tiempo" deja una
- * marca { video, t, fecha } en localStorage (claveMarca), que se borra con "pausa", "fin", al cambiar de video o
- * al cerrar la página. Si al arrancar la marca sigue ahí, la sesión anterior se cortó: corteAnterior() anota el
- * corte (en el mismo registro) y la página abre ese video quieto en t, con "Seguir desde m:ss" (cargar con
- * desde). No reproduce solo.
+ * Retomar y cortes de la app entera: en el iPhone, cuando se acaba la memoria se recarga la página principal y no
+ * solo el iframe, así que no llega ningún segundo "listo". Por eso, mientras un video suena, cada "tiempo" deja
+ * una marca { video, t, fecha } en localStorage (claveMarca), que se borra con "pausa", "fin" o al cambiar de
+ * video. Cerrar la página o mandarla al fondo (pagehide, visibilitychange a hidden) no la borra: la deja con
+ * cerrada: true y el último tiempo, y una "pausa" que llega con la página en el fondo la actualiza en vez de borrarla. Si al
+ * arrancar hay una marca de menos de MARCA_HORAS, corteAnterior() la devuelve y la página abre ese video quieto
+ * en t, con "Seguir desde m:ss" (cargar con desde); no reproduce solo. Solo si la marca no dice cerrada: true
+ * (la página se fue sin avisar: iOS la cerró sin memoria) se anota además un corte en el mismo registro. Una
+ * marca más vieja se ignora y se borra.
  *
  * Funciona suelto: con require() exporta las funciones puras; cargado en una página deja todo en
  * window.Reproduccion.
@@ -52,6 +55,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
   const TOPE_CORTES = 50;
+  const MARCA_HORAS = 12;     // una marca más vieja ya no ofrece seguir
   const MINIMO_VISTO = 0.7;
   const UMBRAL = 80;          // px que hay que deslizar para cambiar de video
   const VELOCIDAD = 0.25;     // px/ms como mínimo (un arrastre lento no cambia de video)
@@ -102,13 +106,22 @@
       .slice(-TOPE_CORTES);
   }
 
-  /** La marca de "este video estaba sonando" (texto guardado) -> { video, t, fecha }, o null si no sirve. */
+  /** La marca de "este video estaba sonando" (texto guardado) -> { video, t, fecha } (con cerrada: true si la
+   *  página se cerró o se fue al fondo avisando), o null si no sirve. */
   function leerMarca(json) {
     let d = null;
     try { d = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return null; }
     if (!d || typeof d !== "object" || typeof d.video !== "string" || !d.video || !numero(d.t) || d.t < 0 ||
         typeof d.fecha !== "string") return null;
-    return { video: d.video, t: d.t, fecha: d.fecha };
+    const m = { video: d.video, t: d.t, fecha: d.fecha };
+    if (d.cerrada === true) m.cerrada = true;
+    return m;
+  }
+
+  /** Si la marca es de hace menos de MARCA_HORAS (ahora en ms). Una fecha que no se entiende es vieja. */
+  function marcaVigente(m, ahora) {
+    const f = Date.parse(m && m.fecha);
+    return !isNaN(f) && ahora - f < MARCA_HORAS * 3600 * 1000;
   }
 
   /** Suma un corte al final; si pasa del tope, se van los más viejos. No cambia la lista que recibe. */
@@ -164,8 +177,8 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
    *  Devuelve { cargar(id, auto, desde), detener(), cortes(), corteAnterior(existe), enviar(msg), sonando(), feed(),
    *  entrar(), salir() }: cargar se llama justo antes de poner el src del iframe; auto = reproducir apenas esté
    *  listo; desde = dejarlo quieto en ese segundo, ofreciendo seguir. corteAnterior se llama al arrancar, antes
-   *  de abrir un video: si la sesión anterior se cortó sonando, anota el corte y devuelve { video, t } (si
-   *  existe(video)); si no, null. */
+   *  de abrir un video: si la sesión anterior se fue con un video a medias (hace menos de MARCA_HORAS) devuelve
+   *  { video, t, cerrada } (si existe(video)) y anota un corte si no fue un cierre avisado; si no, null. */
   function conectar(o) {
     const v = o.iframe, caja = o.caja, doc = caja.ownerDocument, tx = TEXTOS[o.idioma] || TEXTOS.es;
     let id = null, arrancar = false, esperando = false, ultimoT = 0, terminado = false, sonando = false, desde0 = 0;
@@ -190,9 +203,12 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
       try { localStorage.setItem(o.claveCortes(), JSON.stringify(sumarCorte(cortes(), c))); } catch (e) {}
     }
     // la marca de "sonando": si la app entera se cae, al volver a abrirla sigue ahí
-    function ponerMarca(t) {
+    const enElFondo = () => doc.visibilityState === "hidden";
+    function ponerMarca(t, cerrada) {
       if (!o.claveMarca || id === null) return;
-      try { localStorage.setItem(o.claveMarca(), JSON.stringify({ video: id, t, fecha: new Date().toISOString() })); } catch (e) {}
+      const m = { video: id, t, fecha: new Date().toISOString() };
+      if (cerrada || enElFondo()) m.cerrada = true;
+      try { localStorage.setItem(o.claveMarca(), JSON.stringify(m)); } catch (e) {}
     }
     function borrarMarca() {
       if (!o.claveMarca) return;
@@ -203,12 +219,15 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
       let m = null;
       try { m = leerMarca(localStorage.getItem(o.claveMarca())); } catch (e) { return null; }
       borrarMarca();
-      if (!m || (existe && !existe(m.video))) return null;
-      anotarCorte(m.t, m.video, m.fecha);
-      return { video: m.video, t: m.t };
+      if (!m || !marcaVigente(m, Date.now()) || (existe && !existe(m.video))) return null;
+      if (!m.cerrada) anotarCorte(m.t, m.video, m.fecha);   // se fue sin avisar: iOS la cerró sin memoria
+      return { video: m.video, t: m.t, cerrada: !!m.cerrada };
     }
-    // cerrar la página o irse a otra no es un corte (iOS, cuando se queda sin memoria, no avisa)
-    doc.defaultView.addEventListener("pagehide", () => { if (sonando) borrarMarca(); });
+    // cerrar la página o mandarla al fondo con un video a medias: la marca queda (para ofrecer seguir) avisando
+    // que fue un cierre y no un corte (iOS, cuando se queda sin memoria, no avisa)
+    function seVa() { if (sonando) ponerMarca(ultimoT, true); }
+    doc.defaultView.addEventListener("pagehide", seVa);
+    doc.addEventListener("visibilitychange", () => { if (enElFondo()) seVa(); });
     const ponerCapa = () => capa.classList.toggle("activa", enFeed && sonando);
     function ponerSonando(x) { sonando = x; ponerCapa(); }
     function cargar(nuevoId, auto, desde) {
@@ -332,7 +351,8 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
         if (tipo === "tiempo") ponerMarca(ultimoT);
         return;
       }
-      if (tipo === "pausa") { ponerSonando(false); borrarMarca(); return; }
+      // en el fondo, la pausa la suele poner el sistema: la marca queda (en ese segundo) para ofrecer seguir
+      if (tipo === "pausa") { ponerSonando(false); if (enElFondo()) ponerMarca(ultimoT, true); else borrarMarca(); return; }
       if (tipo === "deslizar") {
         if ([d.dx, d.dy, d.ms, d.y0].every(numero)) gestoFeed(d.dx, d.dy, d.ms, null, d.y0);
         return;
@@ -348,6 +368,6 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
     return { cargar, detener, cortes, corteAnterior, enviar, sonando: () => sonando, feed: () => enFeed, entrar, salir };
   }
 
-  return { TOPE_CORTES, MINIMO_VISTO, prepararAudio, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, leerMarca, sumarCorte, contarComoVisto,
-           gesto, conectar };
+  return { TOPE_CORTES, MINIMO_VISTO, MARCA_HORAS, prepararAudio, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, leerMarca,
+           marcaVigente, sumarCorte, contarComoVisto, gesto, conectar };
 });

@@ -11,6 +11,9 @@ en el orden de temas.json, solo con los temas que ya tienen video en T/videos/. 
 T/tNN/preguntas.json solo si se validaron sin errores y no cambiaron después (etapas.preguntas_listas);
 si no, va una lista vacía. v1 era igual sin "preguntas". web/paquete.js valida lo mismo del lado de la
 app y acepta v1 y v2; si cambia el formato, cambian los dos (y sube "v").
+
+"hecho_con" es la versión del plugin que lo armó (.claude-plugin/plugin.json); la app la muestra cuando no
+puede leer el paquete por su versión. Es opcional: si no se encuentra, no va.
 """
 from __future__ import annotations
 
@@ -25,9 +28,19 @@ from etapas import preguntas_listas
 
 VERSION = 2
 SUFIJO = ".s2s.json"
+PLUGIN_JSON = Path(__file__).resolve().parents[3] / ".claude-plugin" / "plugin.json"
 TITULO_RE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
 # lo que no puede ir en un nombre de archivo en Windows, macOS o Linux
 PROHIBIDOS_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def version_plugin() -> str | None:
+    """La versión de scroll-to-study que está corriendo (la de plugin.json), o None si no se encuentra."""
+    try:
+        v = json.loads(PLUGIN_JSON.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError):
+        return None
+    return v if isinstance(v, str) and v else None
 
 
 def titulo_de_lista(t: Path) -> str | None:
@@ -77,6 +90,9 @@ def armar(t: Path, titulo: str, idioma: str, ahora: datetime | None = None, inv:
     ahora = ahora or datetime.now(timezone.utc)
     paquete = {"v": VERSION, "titulo": titulo, "idioma": idioma,
                "generado": ahora.isoformat(timespec="seconds"), "videos": videos}
+    hecho_con = version_plugin()
+    if hecho_con:
+        paquete["hecho_con"] = hecho_con
     return paquete, sin_video, sin_duracion, sin_preguntas
 
 

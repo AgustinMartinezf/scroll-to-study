@@ -9,6 +9,10 @@
  *   cuestionario.js, igual que en la lista de la compu, y el resultado decide cuándo vuelve el tema.
  * - Lo que pasa con el iframe del video (los avisos, retomarlo si se recarga solo y el registro de cortes)
  *   está en reproduccion.js, compartido con la lista de la compu.
+ * - Actualizaciones: al abrir la app y cada vez que vuelve a primer plano se le pide al service worker que
+ *   busque una versión nueva. Si se instala una, aparece "Hay una versión nueva de la app" con "Actualizar",
+ *   que recarga la página. Nunca se recarga sola (podría estar sonando un video). Al pie, chica, la
+ *   versión que corre (version.json, que arma tools/sitio.py).
  * - Cada video corre en un iframe sandbox (sin allow-same-origin) desde una URL blob: no puede leer los
  *   otros paquetes ni el progreso. Habla con la lista por postMessage, como en videos/index.html.
  */
@@ -27,14 +31,6 @@
       importado: "Listo: «{t}», {n} videos guardados en este teléfono.",
       actualizado: "Se actualizó «{t}» ({n} videos). Tu progreso sigue igual.",
       espacio: "Ocupa {mb} en este teléfono",
-      err: {
-        no_es_json: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
-        no_es_paquete: "Ese archivo no es un paquete de scroll to study. Elegí el .s2s.json que armaste en la compu.",
-        version: "Este paquete es de otra versión ({c}): armalo de nuevo con s2s.py paquete.",
-        campo: "El paquete está dañado (falta o está mal «{c}»): armalo de nuevo con s2s.py paquete.",
-        vacio: "El paquete no tiene videos.",
-        repetido: "El paquete tiene el video «{c}» repetido: armalo de nuevo con s2s.py paquete.",
-      },
       lleno: "No hay lugar en el teléfono para guardar estos videos. Liberá espacio o borrá otra materia.",
       errGuardar: "No se pudieron guardar los videos ({c}).",
       errLeer: "No se pudo leer el archivo.",
@@ -55,6 +51,7 @@
       cero: "Borrar progreso", seguro: "¿Borrar todo el progreso de «{t}»?",
       exportar: "Exportar progreso", copiado: "Copiado al portapapeles",
       copiaManual: "No se pudo copiar solo: seleccioná este texto y copialo.",
+      nueva: "Hay una versión nueva de la app", actualizar: "Actualizar", version: "versión {v}",
     },
     en: {
       importar: "Import videos", elegir: "Saved videos", borrar: "Delete",
@@ -63,14 +60,6 @@
       importado: "Done: “{t}”, {n} videos saved on this phone.",
       actualizado: "Updated “{t}” ({n} videos). Your progress is unchanged.",
       espacio: "Uses {mb} on this phone",
-      err: {
-        no_es_json: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
-        no_es_paquete: "That file is not a scroll to study package. Pick the .s2s.json you made on your computer.",
-        version: "This package is from another version ({c}): make it again with s2s.py paquete.",
-        campo: "The package is damaged (“{c}” is missing or wrong): make it again with s2s.py paquete.",
-        vacio: "The package has no videos.",
-        repetido: "The package has the video “{c}” twice: make it again with s2s.py paquete.",
-      },
       lleno: "There is no room on the phone for these videos. Free up some space or delete another set.",
       errGuardar: "Couldn't save the videos ({c}).",
       errLeer: "Couldn't read the file.",
@@ -91,6 +80,7 @@
       cero: "Clear progress", seguro: "Clear all progress for “{t}”?",
       exportar: "Export progress", copiado: "Copied to the clipboard",
       copiaManual: "Couldn't copy it automatically: select this text and copy it.",
+      nueva: "There is a new version of the app", actualizar: "Update", version: "version {v}",
     },
   };
   const IDIOMA = /^es\b/i.test(navigator.language || "") ? "es" : "en";
@@ -102,7 +92,8 @@
   const $ = id => document.getElementById(id);
   const v = $("v");
   for (const id of ["importar", "vTitulo", "vTexto", "vPrivado", "iTitulo", "iPaso1", "iPaso2", "iPaso3",
-                    "iSeparado", "importarIgual", "sub", "ant", "sig", "cero"]) $(id).textContent = TX[id];
+                    "iSeparado", "importarIgual", "sub", "ant", "sig", "cero", "actualizar"]) $(id).textContent = TX[id];
+  $("nuevaTxt").textContent = TX.nueva;
   $("borrarPaq").textContent = TX.borrar; $("exp").textContent = TX.exportar;
   $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos; $("lHoy").textContent = QX.paraHoy;
   $("paquetes").setAttribute("aria-label", TX.elegir);
@@ -236,9 +227,9 @@
     document.title = actual.titulo;
     $("titulo").textContent = actual.titulo;
     pintarApp();
-    // si la app se cerró sola con un video sonando (en el iPhone, sin memoria se recarga entera), se anota el
-    // corte y se abre ese video quieto donde iba, con "Seguir desde m:ss" (reproduccion.js); si no, lo que
-    // toca hoy (o el último, si no queda nada)
+    // si la app se cerró con un video a medias (la cerró la persona, o iOS sin memoria: ahí se anota el corte),
+    // se abre ese video quieto donde iba, con "Seguir desde m:ss" (reproduccion.js); si no, lo que toca hoy (o
+    // el último, si no queda nada)
     const corte = R.corteAnterior(id => VIDEOS.some(x => x.id === id));
     if (corte) { abrir(pos(corte.video), false, corte.t); return; }
     const inicial = P.queTocaHoy(st, VIDEOS, hoy());
@@ -263,7 +254,11 @@
     try { texto = await leerTexto(archivo); } catch (e) { error(TX.errLeer); return; }
     const r = PQ.leer(texto);
     texto = null;
-    if (r.error) { error(fmt(TX.err[r.error.codigo] || TX.err.no_es_paquete, { c: r.error.campo })); return; }
+    if (r.error) {
+      error(PQ.mensaje(r.error, IDIOMA));       // los mensajes de un paquete que no sirve están en paquete.js
+      if (r.error.codigo === "version_nueva") buscarVersionNueva();
+      return;
+    }
     const d = r.paquete;
     let habia;
     try {
@@ -433,11 +428,52 @@
   };
 
   // ---------------------------------------------------------------------------------------------
+  // versión de la app y actualizaciones
+  // ---------------------------------------------------------------------------------------------
+  let registro = null;
+  /** Le pide al service worker que busque una versión nueva (sin red, falla callado). */
+  function buscarVersionNueva() {
+    if (registro) registro.update().catch(() => {});
+  }
+  function hayVersionNueva() { $("nueva").hidden = false; }
+  // solo la recarga quien toca el botón: nunca sola, por si suena un video
+  $("actualizar").onclick = () => location.reload();
+
+  function mostrarVersion() {
+    fetch("version.json")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d && typeof d.app === "string") $("version").textContent = fmt(TX.version, { v: d.app }); })
+      .catch(() => {});
+  }
+
+  if ("serviceWorker" in navigator) {
+    const sw = navigator.serviceWorker;
+    // la primera instalación también cambia el controlador (clients.claim): esa no es una versión nueva
+    let controlada = !!sw.controller;
+    sw.addEventListener("controllerchange", () => { if (controlada) hayVersionNueva(); controlada = true; });
+    sw.register("sw.js")
+      .then(r => {
+        registro = r;
+        r.addEventListener("updatefound", () => {
+          const nuevo = r.installing, habia = !!sw.controller;
+          if (!nuevo || !habia) return;
+          nuevo.addEventListener("statechange", () => {
+            if (nuevo.state === "installed" || nuevo.state === "activated") hayVersionNueva();
+          });
+        });
+        if (r.waiting && sw.controller) hayVersionNueva();
+        buscarVersionNueva();
+      })
+      .catch(e => console.warn("service worker:", e));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") buscarVersionNueva();
+    });
+  }
+  mostrarVersion();
+
+  // ---------------------------------------------------------------------------------------------
   // arranque
   // ---------------------------------------------------------------------------------------------
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(e => console.warn("service worker:", e));
-  }
   pintarApp();
   abrirDB()
     .then(async d => {

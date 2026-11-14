@@ -627,8 +627,8 @@ $("cero").onclick = () => {
   no.onclick = () => caja.remove();
   caja.append(q, si, no); $("cero").after(caja);
 };
-// si la página se cerró sola con un video sonando (reproduccion.js), se anota el corte y se abre ese video quieto
-// donde iba, con "Seguir desde m:ss"; si no, lo que toca hoy (o el último, si no queda nada)
+// si la página se cerró con un video a medias (reproduccion.js; si se cerró sola, se anota el corte), se abre ese
+// video quieto donde iba, con "Seguir desde m:ss"; si no, lo que toca hoy (o el último, si no queda nada)
 const corte = R.corteAnterior(id => VIDEOS.some(x => x.id === id));
 const inicial = P.queTocaHoy(st, VIDEOS, hoy());
 if (corte) abrir(pos(corte.video), false, corte.t);

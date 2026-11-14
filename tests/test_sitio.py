@@ -43,6 +43,20 @@ def test_el_service_worker_cachea_todo_con_una_version_por_contenido(tmp_path, m
     assert otra != version
 
 
+def test_version_json_tiene_la_huella_y_las_versiones_de_paquete_que_acepta_la_app(tmp_path):
+    d = sitio.armar(tmp_path / "_site")
+    v = json.loads((d / "version.json").read_text(encoding="utf-8"))
+    sw = (d / "sw.js").read_text(encoding="utf-8")
+    assert v["app"] == re.search(r'const VERSION = "([0-9a-f]{12})";', sw)[1]
+    assert v["paquetes"] == [1, 2]
+    assert '"version.json"' in sw                          # sin red también se ve la versión
+
+
+def test_el_service_worker_instala_sin_la_cache_http():
+    sw = (RAIZ / "web" / "sw.js").read_text(encoding="utf-8")
+    assert 'cache: "reload"' in sw
+
+
 def test_el_service_worker_borra_las_caches_viejas_y_responde_desde_cache():
     sw = (RAIZ / "web" / "sw.js").read_text(encoding="utf-8")
     assert "caches.delete" in sw and "k !== CACHE" in sw

@@ -551,8 +551,10 @@ def test_mientras_suena_deja_una_marca_que_se_borra_al_pausar_terminar_o_cambiar
     assert marca(page) is None
     f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 4 } }, '*')")
     page.wait_for_function(HAY_MARCA)
-    page.reload()                                                     # cerrar o recargar la página no es un corte
-    video(page, "t01.html")                                           # lo que toca hoy
+    page.reload()                    # cerrar o recargar la página no es un corte, pero ofrece seguir desde ahí
+    f = video(page, "t02.html")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 4}]
     assert marca(page) is None and cortes(page) == []
 
 
@@ -585,3 +587,35 @@ def test_una_marca_de_un_video_que_ya_no_esta_se_descarta(navegador, lista):
     page.wait_for_timeout(200)
     assert cortes(page) == [] and marca(page) is None
     assert not f.evaluate("window.recibidos.some(m => m && m.s2s === 'ir')")
+
+
+def test_mandar_la_pagina_al_fondo_deja_la_marca_como_cierre_aunque_llegue_una_pausa(navegador, lista):
+    page = abrir(navegador, lista)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0 } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 8 } }, '*')")
+    page.wait_for_function(HAY_MARCA)
+    page.evaluate("""Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+                     document.dispatchEvent(new Event('visibilitychange'))""")
+    page.wait_for_function("JSON.parse(localStorage.getItem('s2s-marca:' + document.title)).cerrada === true")
+    # el sistema pausa el video en el fondo: la marca queda
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'pausa', t: 9 } }, '*')")
+    page.wait_for_timeout(200)
+    m = marca(page)
+    assert (m["video"], m["t"], m["cerrada"]) == ("t01", 9, True)
+    page.reload()
+    f = video(page, "t01.html")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 9}] and cortes(page) == []
+
+
+def test_una_marca_de_hace_mas_de_12_horas_no_ofrece_nada(navegador, lista):
+    page = abrir(navegador, lista)
+    video(page, "t01.html")
+    page.evaluate("localStorage.setItem('s2s-marca:' + document.title, "
+                  "JSON.stringify({ video: 't02', t: 25.4, fecha: '2026-11-11T20:00:00.000Z' }))")
+    page.reload()
+    f = video(page, "t01.html")                                       # lo que toca hoy
+    page.wait_for_timeout(200)
+    assert not f.evaluate("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert cortes(page) == [] and marca(page) is None

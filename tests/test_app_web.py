@@ -9,6 +9,7 @@ fallan en vez de saltearse."""
 import functools
 import json
 import os
+import shutil
 import threading
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -69,6 +70,44 @@ def sitio_url(tmp_path_factory):
     srv.shutdown()
 
 
+class _Cacheable(_Callado):
+    """Como GitHub Pages: deja que el navegador guarde cada archivo 10 minutos en su caché HTTP."""
+    def send_head(self):
+        # http.server compara fechas al segundo: A y B se arman en el mismo segundo y daría 304 sin serlo
+        del self.headers["If-Modified-Since"]
+        return super().send_head()
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "max-age=600")
+        super().end_headers()
+
+
+@pytest.fixture
+def sitio_cambiante(tmp_path, monkeypatch):
+    """Un _site/ servido con Cache-Control: max-age=600 que se puede volver a armar en el mismo puerto.
+    Devuelve (url, publicar): publicar(marca) arma el sitio con una línea más en app.js que deja
+    window.S2S_SITIO = marca, como un deploy nuevo."""
+    d = tmp_path / "_site"
+    web = tmp_path / "web"
+
+    def publicar(marca):
+        if web.exists():
+            shutil.rmtree(web)
+        shutil.copytree(sitio.WEB_ORIGINAL, web)
+        app = web / "app.js"
+        app.write_text(app.read_text(encoding="utf-8") + f"\nwindow.S2S_SITIO = {json.dumps(marca)};\n",
+                       encoding="utf-8")
+        monkeypatch.setattr(sitio, "WEB", web)
+        sitio.armar(d)
+
+    monkeypatch.setattr(sitio, "WEB_ORIGINAL", sitio.WEB, raising=False)
+    publicar("A")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_Cacheable, directory=str(d)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}/", publicar
+    srv.shutdown()
+
+
 @pytest.fixture(scope="module")
 def navegador():
     try:
@@ -116,6 +155,16 @@ def frame_del_video(page, vid):
                     pass
         page.wait_for_timeout(100)
     raise AssertionError(f"no apareció el video {vid}")
+
+
+def esperar(page, js, arg=None, segundos=15):
+    """Como wait_for_function, pero para una función async (wait_for_function no espera la promesa)."""
+    for _ in range(segundos * 10):
+        r = page.evaluate(js, arg)
+        if r:
+            return r
+        page.wait_for_timeout(100)
+    raise AssertionError(f"no pasó: {js}")
 
 
 def importar(page, d, **kw):
@@ -172,6 +221,19 @@ def test_un_archivo_que_no_es_paquete_da_un_error_claro_y_no_guarda_nada(context
     assert page.evaluate("""new Promise(ok => { const r = indexedDB.open('s2s-app');
         r.onsuccess = () => { const q = r.result.transaction('paquetes').objectStore('paquetes').count();
                               q.onsuccess = () => ok(q.result); }; })""") == 0
+
+
+def test_un_paquete_mas_nuevo_que_la_app_dice_que_se_actualice_la_app(contexto, sitio_url):
+    page = abrir(contexto(), sitio_url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    page.evaluate("""navigator.serviceWorker.getRegistration().then(r => {
+        window.pedidos = 0; const u = r.update.bind(r); r.update = () => { pedidos++; return u(); }; })""")
+    importar(page, dict(paquete(), v=99, hecho_con="9.9.9"))
+    page.wait_for_selector("#error:not([hidden])")
+    assert texto(page, "#error") == ("Este paquete es de una versión más nueva que la app. Cerrá la app y abrila con "
+                                     "internet para actualizarla. (Lo armó scroll-to-study 9.9.9.)")
+    assert page.evaluate("window.pedidos") == 1                 # y ya busca la versión nueva
+    assert page.is_visible("#vacio")
 
 
 def test_varios_paquetes_reimportar_conserva_el_progreso_y_borrar(contexto, sitio_url):
@@ -231,6 +293,63 @@ def test_abre_sin_conexion_desde_el_service_worker(contexto, sitio_url):
     # una pestaña nueva, también sin red
     otra = abrir(ctx, sitio_url)
     assert texto(otra, "#titulo") == "Redes"
+
+
+def test_la_cache_nueva_del_service_worker_no_sale_de_la_cache_http(contexto, sitio_cambiante):
+    """GitHub Pages deja cachear 10 minutos: la caché de una versión nueva tiene que tener los archivos nuevos,
+    no los que el navegador guardó de la anterior."""
+    url, publicar = sitio_cambiante
+    page = abrir(contexto(), url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    assert page.evaluate("window.S2S_SITIO") == "A"
+    # el navegador ya tiene app.js de A en su caché HTTP (max-age=600)
+    assert "S2S_SITIO = \"A\"" in page.evaluate("fetch('app.js', { cache: 'force-cache' }).then(r => r.text())")
+    viejas = page.evaluate("caches.keys()")
+    publicar("B")
+    page.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")
+    # la versión nueva se instala en una caché propia (con todos los archivos) y borra la vieja
+    texto_app = esperar(page, """async vs => {
+        const ks = await caches.keys();
+        if (ks.length !== 1 || vs.includes(ks[0])) return null;
+        const r = await (await caches.open(ks[0])).match('app.js');
+        return r ? r.text() : null; }""", viejas)
+    assert "S2S_SITIO = \"B\"" in texto_app and "S2S_SITIO = \"A\"" not in texto_app
+
+
+def version_de(url):
+    import urllib.request
+    return json.loads(urllib.request.urlopen(url + "version.json").read())["app"]
+
+
+def test_una_version_nueva_avisa_y_actualizar_corre_el_codigo_nuevo(contexto, sitio_cambiante):
+    url, publicar = sitio_cambiante
+    page = abrir(contexto(), url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    version_a = version_de(url)
+    page.wait_for_function("v => document.getElementById('version').textContent === 'versión ' + v", arg=version_a)
+    assert page.evaluate("window.S2S_SITIO") == "A"
+    page.wait_for_timeout(300)
+    assert not page.is_visible("#nueva")                    # la primera instalación no es una versión nueva
+    importar(page, paquete())
+    f = frame_del_video(page, "t01")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't01' } }, '*')")
+
+    publicar("B")
+    # volver a primer plano busca la versión nueva (en el iPhone la app casi nunca arranca de cero)
+    page.evaluate("""Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+                     document.dispatchEvent(new Event('visibilitychange'))""")
+    page.wait_for_selector("#nueva:not([hidden])", timeout=15000)
+    assert texto(page, "#nuevaTxt") == "Hay una versión nueva de la app" and texto(page, "#actualizar") == "Actualizar"
+    # no se recarga sola: sigue corriendo A, con el video donde estaba
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.S2S_SITIO") == "A" and frame_del_video(page, "t01")
+
+    page.click("#actualizar")
+    page.wait_for_function("document.documentElement.dataset.appLista === '1' && window.S2S_SITIO === 'B'")
+    version_b = version_de(url)
+    assert version_b != version_a
+    page.wait_for_function("v => document.getElementById('version').textContent === 'versión ' + v", arg=version_b)
+    assert not page.is_visible("#nueva") and texto(page, "#titulo") == "Redes"
 
 
 def test_iphone_sin_instalar_explica_como_instalarla(contexto, sitio_url):
@@ -387,6 +506,44 @@ def test_si_la_app_entera_se_corto_sonando_anota_el_corte_y_ofrece_seguir_desde_
     assert [(c["video"], c["t"]) for c in cortes] == [("t02", 31.5)]
     assert page2.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
     assert texto(page2, "#tAhora") == "Tema t02"
+
+
+def test_cerrar_la_app_a_mitad_de_un_video_ofrece_seguir_y_no_es_un_corte(contexto, sitio_url):
+    """Cerrar la app (pagehide) con un video sonando deja la marca con cerrada: true: al volver se ofrece
+    "Seguir desde m:ss", pero no se anota un corte."""
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    page.click("#sig")
+    f = frame_del_video(page, "t02")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't02' } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 12.5, video: 't02' } }, '*')")
+    page.wait_for_function("localStorage.getItem('s2s-marca:Redes') !== null")
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    f = frame_del_video(page, "t02")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 12.5}]     # quieto ahí: no reproduce solo
+    assert page.evaluate("localStorage.getItem('s2s-cortes:Redes')") is None
+    assert page.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
+    assert texto(page, "#tAhora") == "Tema t02"
+
+
+def test_una_marca_de_hace_mas_de_12_horas_no_ofrece_seguir(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    vieja = {"video": "t02", "t": 31.5, "fecha": "2026-11-11T20:00:00.000Z"}
+    page.evaluate("m => localStorage.setItem('s2s-marca:Redes', m)", json.dumps(vieja))
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    f = frame_del_video(page, "t01")                            # lo que toca hoy
+    page.wait_for_timeout(200)
+    assert f.evaluate("window.recibidos") == []
+    assert page.evaluate("localStorage.getItem('s2s-cortes:Redes')") is None
+    assert page.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
 
 
 def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
