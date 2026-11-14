@@ -511,3 +511,77 @@ def test_la_lista_pide_playback_y_arranca_el_silencio_en_el_primer_toque(navegad
     page.wait_for_timeout(200)
     assert page.evaluate("audios.length") == 1      # uno solo, en bucle
     assert errores == []
+
+
+# --- cortes de la página entera (la marca de "sonando", reproduccion.js) ------------------------------------
+
+def marca(page):
+    m = page.evaluate("localStorage.getItem('s2s-marca:' + document.title)")
+    return None if m is None else json.loads(m)
+
+
+def cortes(page):
+    return json.loads(page.evaluate("localStorage.getItem('s2s-cortes:' + document.title)") or "[]")
+
+
+HAY_MARCA = "localStorage.getItem('s2s-marca:' + document.title) !== null"
+SIN_MARCA = "localStorage.getItem('s2s-marca:' + document.title) === null"
+
+
+def test_mientras_suena_deja_una_marca_que_se_borra_al_pausar_terminar_o_cambiar(navegador, lista):
+    page = abrir(navegador, lista)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0 } }, '*')")
+    page.wait_for_timeout(100)
+    assert marca(page) is None                                       # se guarda con cada "tiempo"
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 6 } }, '*')")
+    page.wait_for_function(HAY_MARCA)
+    m = marca(page)
+    assert (m["video"], m["t"]) == ("t01", 6) and m["fecha"].startswith("2026-11-12")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'pausa', t: 7 } }, '*')")
+    page.wait_for_function(SIN_MARCA)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 9 } }, '*')")
+    page.wait_for_function(HAY_MARCA)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 10 } }, '*')")
+    page.wait_for_function(SIN_MARCA)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 3 } }, '*')")
+    page.wait_for_function(HAY_MARCA)
+    page.click("#sig")                                                # cambiar de video
+    f = video(page, "t02.html")
+    assert marca(page) is None
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 4 } }, '*')")
+    page.wait_for_function(HAY_MARCA)
+    page.reload()                                                     # cerrar o recargar la página no es un corte
+    video(page, "t01.html")                                           # lo que toca hoy
+    assert marca(page) is None and cortes(page) == []
+
+
+def test_si_la_pagina_se_corto_sonando_anota_el_corte_y_ofrece_seguir_desde_ahi(navegador, lista):
+    page = abrir(navegador, lista)
+    video(page, "t01.html")
+    # lo que queda cuando iOS recarga la página entera a mitad del video t02 (no avisa nada antes)
+    page.evaluate("localStorage.setItem('s2s-marca:' + document.title, "
+                  "JSON.stringify({ video: 't02', t: 25.4, fecha: '2026-11-12T11:58:00.000Z' }))")
+    page.reload()
+    f = video(page, "t02.html")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 25.4}]   # quieto ahí: no reproduce solo
+    c = cortes(page)
+    assert [(x["video"], x["t"], x["fecha"]) for x in c] == [("t02", 25.4, "2026-11-12T11:58:00.000Z")]
+    assert "Mozilla" in c[0]["ua"] and marca(page) is None
+    assert texto(page, "#tAhora") == "Tema 2"
+    page.reload()                                                     # el mismo corte no se anota dos veces
+    video(page, "t01.html")                                           # ahora sí, lo que toca hoy
+    assert len(cortes(page)) == 1
+
+
+def test_una_marca_de_un_video_que_ya_no_esta_se_descarta(navegador, lista):
+    page = abrir(navegador, lista)
+    video(page, "t01.html")
+    page.evaluate("localStorage.setItem('s2s-marca:' + document.title, "
+                  "JSON.stringify({ video: 'otro', t: 5, fecha: 'x' }))")
+    page.reload()
+    f = video(page, "t01.html")
+    page.wait_for_timeout(200)
+    assert cortes(page) == [] and marca(page) is None
+    assert not f.evaluate("window.recibidos.some(m => m && m.s2s === 'ir')")

@@ -10,8 +10,9 @@
  *   tecla      una tecla que es de la página (↑, ↓, Esc…) { tecla }     rueda   la rueda del mouse { dy }
  * Cada aviso trae también duracion y reproducidos: los segundos que sonaron de verdad (sin contar dos
  * veces lo que se vio dos veces). La página le pide { s2s: "play" }, { s2s: "play", desde: t },
- * { s2s: "pausa" }, le pasa un toque { s2s: "toque", x } o una tecla { s2s: "tecla", tecla }, y le dice
- * si está en el modo feed { s2s: "feed", activo }.
+ * { s2s: "pausa" }, le pasa un toque { s2s: "toque", x } o una tecla { s2s: "tecla", tecla }, le dice
+ * si está en el modo feed { s2s: "feed", activo } y lo deja quieto en un segundo, ofreciendo seguir desde ahí,
+ * con { s2s: "ir", t }.
  *
  * Dos modos:
  *   normal  el reproductor en la página, con la lista abajo. No hay gestos sobre el video: la página
@@ -34,6 +35,13 @@
  * retoma desde el último tiempo conocido, no desde 0, y se anota { fecha, video, t, ua } en un registro de
  * diagnóstico (localStorage, aparte del progreso, con tope de TOPE_CORTES). "Exportar progreso" lo incluye
  * como "cortes". Nada sale del navegador.
+ *
+ * Cortes de la app entera: en el iPhone, cuando se acaba la memoria se recarga la página principal y no solo el
+ * iframe, así que no llega ningún segundo "listo". Por eso, mientras un video suena, cada "tiempo" deja una
+ * marca { video, t, fecha } en localStorage (claveMarca), que se borra con "pausa", "fin", al cambiar de video o
+ * al cerrar la página. Si al arrancar la marca sigue ahí, la sesión anterior se cortó: corteAnterior() anota el
+ * corte (en el mismo registro) y la página abre ese video quieto en t, con "Seguir desde m:ss" (cargar con
+ * desde). No reproduce solo.
  *
  * Funciona suelto: con require() exporta las funciones puras; cargado en una página deja todo en
  * window.Reproduccion.
@@ -94,6 +102,15 @@
       .slice(-TOPE_CORTES);
   }
 
+  /** La marca de "este video estaba sonando" (texto guardado) -> { video, t, fecha }, o null si no sirve. */
+  function leerMarca(json) {
+    let d = null;
+    try { d = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return null; }
+    if (!d || typeof d !== "object" || typeof d.video !== "string" || !d.video || !numero(d.t) || d.t < 0 ||
+        typeof d.fecha !== "string") return null;
+    return { video: d.video, t: d.t, fecha: d.fecha };
+  }
+
   /** Suma un corte al final; si pasa del tope, se van los más viejos. No cambia la lista que recibe. */
   function sumarCorte(lista, corte) {
     return (lista || []).concat([corte]).slice(-TOPE_CORTES);
@@ -140,14 +157,18 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
   /** Engancha la página al iframe del video.
    *  o = { iframe, caja (el contenedor del iframe), botonFeed (el botón "Pantalla completa"), idioma,
    *        claveCortes() -> clave de localStorage del registro,
+   *        claveMarca() -> clave de localStorage de la marca de "sonando" (cortes de la app entera),
    *        hay(delta) -> si existe el video a delta de este,   mover(delta) abre ese video,
    *        alFin(visto, detalle)   el video terminó; visto: si sonó lo suficiente (contarComoVisto),
    *        activo()?               false para ignorar los mensajes (la app sin paquete) }
-   *  Devuelve { cargar(id, auto), detener(), cortes(), enviar(msg), sonando(), feed(), entrar(), salir() }:
-   *  cargar se llama justo antes de poner el src del iframe; auto = reproducir apenas esté listo. */
+   *  Devuelve { cargar(id, auto, desde), detener(), cortes(), corteAnterior(existe), enviar(msg), sonando(), feed(),
+   *  entrar(), salir() }: cargar se llama justo antes de poner el src del iframe; auto = reproducir apenas esté
+   *  listo; desde = dejarlo quieto en ese segundo, ofreciendo seguir. corteAnterior se llama al arrancar, antes
+   *  de abrir un video: si la sesión anterior se cortó sonando, anota el corte y devuelve { video, t } (si
+   *  existe(video)); si no, null. */
   function conectar(o) {
     const v = o.iframe, caja = o.caja, doc = caja.ownerDocument, tx = TEXTOS[o.idioma] || TEXTOS.es;
-    let id = null, arrancar = false, esperando = false, ultimoT = 0, terminado = false, sonando = false;
+    let id = null, arrancar = false, esperando = false, ultimoT = 0, terminado = false, sonando = false, desde0 = 0;
     let ultimoR = 0, base = 0;   // reproducidos según el último aviso; lo que sonó antes de una recarga
     let nuevo = true;            // el video entiende "toque" y "feed" (los de antes solo "play" y "pausa")
     let enFeed = false;
@@ -164,17 +185,39 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
     function cortes() {
       try { return cargarCortes(localStorage.getItem(o.claveCortes())); } catch (e) { return []; }
     }
-    function anotarCorte(t) {
-      const c = { fecha: new Date().toISOString(), video: id, t, ua: String(navigator.userAgent || "") };
+    function anotarCorte(t, video, fecha) {
+      const c = { fecha: fecha || new Date().toISOString(), video: video || id, t, ua: String(navigator.userAgent || "") };
       try { localStorage.setItem(o.claveCortes(), JSON.stringify(sumarCorte(cortes(), c))); } catch (e) {}
     }
+    // la marca de "sonando": si la app entera se cae, al volver a abrirla sigue ahí
+    function ponerMarca(t) {
+      if (!o.claveMarca || id === null) return;
+      try { localStorage.setItem(o.claveMarca(), JSON.stringify({ video: id, t, fecha: new Date().toISOString() })); } catch (e) {}
+    }
+    function borrarMarca() {
+      if (!o.claveMarca) return;
+      try { localStorage.removeItem(o.claveMarca()); } catch (e) {}
+    }
+    function corteAnterior(existe) {
+      if (!o.claveMarca) return null;
+      let m = null;
+      try { m = leerMarca(localStorage.getItem(o.claveMarca())); } catch (e) { return null; }
+      borrarMarca();
+      if (!m || (existe && !existe(m.video))) return null;
+      anotarCorte(m.t, m.video, m.fecha);
+      return { video: m.video, t: m.t };
+    }
+    // cerrar la página o irse a otra no es un corte (iOS, cuando se queda sin memoria, no avisa)
+    doc.defaultView.addEventListener("pagehide", () => { if (sonando) borrarMarca(); });
     const ponerCapa = () => capa.classList.toggle("activa", enFeed && sonando);
     function ponerSonando(x) { sonando = x; ponerCapa(); }
-    function cargar(nuevoId, auto) {
-      id = nuevoId; arrancar = !!auto; esperando = true; ultimoT = 0; terminado = false; ultimoR = 0; base = 0;
+    function cargar(nuevoId, auto, desde) {
+      borrarMarca();
+      desde0 = numero(desde) && desde > 0 ? desde : 0;
+      id = nuevoId; arrancar = !!auto; esperando = true; ultimoT = desde0; terminado = false; ultimoR = 0; base = 0;
       ponerSonando(false);
     }
-    function detener() { id = null; esperando = false; ponerSonando(false); }
+    function detener() { if (id !== null) borrarMarca(); id = null; esperando = false; ponerSonando(false); }
 
     // --- modo feed ---------------------------------------------------------------------------------
     function entrar() {
@@ -276,6 +319,7 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
         if (esperando) {                      // el primero: lo abrió la página
           esperando = false;
           if (arrancar) enviar({ s2s: "play" });
+          else if (desde0 > 0) enviar({ s2s: "ir", t: desde0 });   // la app se cortó: quieto ahí, con "Seguir desde"
         } else {                              // otro más: el iframe se recargó solo
           anotarCorte(ultimoT);
           base += ultimoR; ultimoR = 0;      // lo que ya había sonado sigue contando
@@ -283,8 +327,12 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
         }
         return;
       }
-      if (tipo === "inicio" || tipo === "sigue" || tipo === "tiempo") { terminado = false; ponerSonando(true); return; }
-      if (tipo === "pausa") { ponerSonando(false); return; }
+      if (tipo === "inicio" || tipo === "sigue" || tipo === "tiempo") {
+        terminado = false; ponerSonando(true);
+        if (tipo === "tiempo") ponerMarca(ultimoT);
+        return;
+      }
+      if (tipo === "pausa") { ponerSonando(false); borrarMarca(); return; }
       if (tipo === "deslizar") {
         if ([d.dx, d.dy, d.ms, d.y0].every(numero)) gestoFeed(d.dx, d.dy, d.ms, null, d.y0);
         return;
@@ -292,14 +340,14 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
       if (tipo === "tecla") { if (typeof d.tecla === "string") teclaFeed(d.tecla); return; }
       if (tipo === "rueda") { if (enFeed && numero(d.dy)) girar(d.dy); return; }
       if (tipo === "fin") {
-        terminado = true; ponerSonando(false);
+        terminado = true; ponerSonando(false); borrarMarca();
         const r = numero(d.reproducidos) ? base + d.reproducidos : undefined;
         o.alFin(contarComoVisto(r, d.duracion), d);
       }
     });
-    return { cargar, detener, cortes, enviar, sonando: () => sonando, feed: () => enFeed, entrar, salir };
+    return { cargar, detener, cortes, corteAnterior, enviar, sonando: () => sonando, feed: () => enFeed, entrar, salir };
   }
 
-  return { TOPE_CORTES, MINIMO_VISTO, prepararAudio, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, sumarCorte, contarComoVisto,
+  return { TOPE_CORTES, MINIMO_VISTO, prepararAudio, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, leerMarca, sumarCorte, contarComoVisto,
            gesto, conectar };
 });

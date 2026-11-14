@@ -357,6 +357,38 @@ def test_si_el_video_se_recarga_solo_la_app_lo_retoma_y_anota_el_corte(contexto,
     assert json.loads(page.evaluate("window.copiado"))["cortes"] == cortes
 
 
+def test_si_la_app_entera_se_corto_sonando_anota_el_corte_y_ofrece_seguir_desde_ahi(contexto, sitio_url):
+    """En el iPhone, sin memoria se recarga la app entera (no solo el iframe): queda la marca de "sonando", y al
+    volver a abrir se anota el corte y se abre ese video quieto en ese segundo, sin reproducir solo."""
+    ctx = contexto()
+    page = abrir_el_dia(ctx, sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    frame_del_video(page, "t01")
+    page.click("#sig")
+    f = frame_del_video(page, "t02")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't02' } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 31.5, video: 't02' } }, '*')")
+    page.wait_for_function("localStorage.getItem('s2s-marca:Redes') !== null")
+    m = json.loads(page.evaluate("localStorage.getItem('s2s-marca:Redes')"))
+    assert (m["video"], m["t"]) == ("t02", 31.5)
+    # la recarga de iOS no avisa nada (una recarga normal, con la página sonando, borra la marca: no es un corte):
+    # con el video quieto se deja la marca como quedaría y se recarga la página
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'pausa', t: 31.5, video: 't02' } }, '*')")
+    page.wait_for_function("localStorage.getItem('s2s-marca:Redes') === null")
+    page.evaluate("m => localStorage.setItem('s2s-marca:Redes', m)", json.dumps(m))
+    page.reload()
+    page2 = page
+    page2.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    f = frame_del_video(page2, "t02")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'ir')")
+    assert f.evaluate("window.recibidos") == [{"s2s": "ir", "t": 31.5}]
+    cortes = json.loads(page2.evaluate("localStorage.getItem('s2s-cortes:Redes')"))
+    assert [(c["video"], c["t"]) for c in cortes] == [("t02", 31.5)]
+    assert page2.evaluate("localStorage.getItem('s2s-marca:Redes')") is None
+    assert texto(page2, "#tAhora") == "Tema t02"
+
+
 def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
     page = abrir_el_dia(contexto(), sitio_url)
     importar(page, paquete_v2())

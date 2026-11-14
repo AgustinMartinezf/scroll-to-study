@@ -204,6 +204,22 @@ def test_un_toque_que_llega_de_la_lista_hace_lo_mismo(abrir):
     assert avisos(page, "pausa") == []
 
 
+def test_ir_deja_el_video_quieto_en_ese_segundo_y_ofrece_seguir_desde_ahi(abrir):
+    """La lista lo pide cuando la app entera se cortó con el video sonando: no arranca solo."""
+    page = abrir(dur=60.0)
+    page.evaluate("postMessage({ s2s: 'ir', t: 85.7 }, '*')")        # se acota a la duración
+    page.wait_for_function("window.cuadro === 60")
+    page.evaluate("postMessage({ s2s: 'ir', t: 25.4 }, '*')")
+    page.wait_for_function("window.cuadro === 25.4")
+    assert page.text_content("#s2s-tapa button") == "Seguir desde 0:25"
+    assert not page.evaluate("document.getElementById('s2s-tapa').hidden")
+    assert page.evaluate("window.__s2s.ahora()") == 25.4
+    assert avisos(page, "inicio") == [] and avisos(page, "sigue") == []
+    tocar_para_ver(page)                                             # el toque sigue desde ahí
+    assert esperar_aviso(page, "sigue")["t"] >= 25.4
+    assert page.evaluate("fuentes[0].desde") == pytest.approx(25.4)
+
+
 # --- el mismo cuadro llegue como llegue (video de verdad, con gsap) --------------------------------
 
 @pytest.fixture(scope="module")
