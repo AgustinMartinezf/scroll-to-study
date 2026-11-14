@@ -33,8 +33,10 @@ Write ONLY the JSON, to the file the request gives:
 ]}
 Ids are q1, q2, q3.
 
-# Example (es, another topic)
-Statements: A1 "La FK de multa es id_prestamo y apunta a prestamo." A3 "No hay FK directa a socio porque abriría un segundo camino que podría contradecirla."
+# Examples (other topics)
+Two examples from different subjects: copy their shape, not their content.
+
+Example 1 (es, databases). Statements: A1 "La FK de multa es id_prestamo y apunta a prestamo." A3 "No hay FK directa a socio porque abriría un segundo camino que podría contradecirla."
 {"preguntas": [
   {"id": "q1", "texto": "¿A qué tabla apunta la FK de multa?",
    "opciones": ["A socio", "A prestamo", "A ejemplar"], "correcta": 1,
@@ -43,4 +45,16 @@ Statements: A1 "La FK de multa es id_prestamo y apunta a prestamo." A3 "No hay F
    "opciones": ["Porque abriría un segundo camino que podría contradecir al primero",
                 "Porque una tabla no puede tener dos FK", "Porque socio no tiene clave primaria"], "correcta": 0,
    "explicacion": "El socio ya se llega por prestamo; un segundo camino podría contradecirlo.", "fuentes": ["A3"]}
+]}
+
+Example 2 (en, networks). Statements: A2 "TCP opens a connection with three messages: SYN, SYN-ACK and ACK." A4 "With only two messages, the server would not know whether its sequence number reached the client."
+{"preguntas": [
+  {"id": "q1", "texto": "What does the server send back after the client's SYN?",
+   "opciones": ["ACK", "SYN-ACK", "Another SYN"], "correcta": 1,
+   "explicacion": "The server answers with SYN-ACK; the ACK is the third message, and the client sends it.", "fuentes": ["A2"]},
+  {"id": "q2", "texto": "Why are two messages not enough to open a TCP connection?",
+   "opciones": ["The server would not know whether its sequence number reached the client",
+                "The client would not know which port the server uses",
+                "The server could not answer until the client sent data"], "correcta": 0,
+   "explicacion": "With only two, nobody confirms the server's sequence number; the third message, ACK, does.", "fuentes": ["A2", "A4"]}
 ]}
