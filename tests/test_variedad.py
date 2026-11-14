@@ -5,12 +5,44 @@ import re
 import subprocess
 import sys
 
+import pytest
 from compile import compilar
 from conftest import SKILL
-from etapas import escribir_salidas
+from etapas import FORMATOS, IDIOMAS, ejemplo_guion, escribir_salidas, iconos_de, validar_guion
 from voz_falsa import generar
 
 LEX = json.loads((SKILL / "scripts" / "lexico.json").read_text(encoding="utf-8"))
+EJEMPLOS = [(f, i) for f in FORMATOS for i in IDIOMAS]
+
+
+def test_un_ejemplo_por_formato_e_idioma():
+    carpeta = SKILL / "prompts" / "ejemplos"
+    assert sorted(p.name for p in carpeta.glob("*.json")) == sorted(f"{f}.{i}.json" for f, i in EJEMPLOS)
+    assert not list((SKILL / "prompts").glob("*.json"))      # ya no hay ejemplos sueltos que Claude copie
+
+
+@pytest.mark.parametrize("formato, idioma", EJEMPLOS)
+def test_los_ejemplos_validan_sin_errores(formato, idioma):
+    """Con el mismo validador que s2s.py guion: fuentes contra un inventario, íconos permitidos, léxico."""
+    g = json.loads((SKILL / ejemplo_guion(formato, idioma)).read_text(encoding="utf-8"))
+    fuentes = {f for b in g["bloques"] for f in b["fuentes"]}
+    assert fuentes and all(re.fullmatch(r"A\d+", f) for f in fuentes)
+    inv = {"afirmaciones": [{"id": f, "texto": "", "cita": "", "estado": "ok"} for f in sorted(fuentes)]}
+    spec, errores, avisos = validar_guion(g, inv, idioma, "materia")
+    assert errores == []
+    # sin avisos de forma (duración, pronunciación, clímax); los de identificadores salen porque el
+    # inventario de acá no tiene textos
+    assert [a for a in avisos if "no aparecen en sus fuentes" not in a] == []
+    assert any(e[1] == "boom" for e in spec["EVENTS"])
+    tipos = {e["type"] for b in g["bloques"] for e in b["elementos"]}
+    acciones = {e[1] for e in spec["EVENTS"]}
+    if formato != "historia":                                 # solo el de la biblioteca es de Bases de Datos
+        assert "table" not in tipos
+        assert not {"database", "table"} & {ic for b in g["bloques"] for e in b["elementos"] for ic in iconos_de(e)}
+    requisitos = {"pregunta": {"flow", "countdown"} <= tipos and "send" in acciones,
+                  "avsb": bool({"formula", "venn"} & tipos),
+                  "pasos": bool({"console", "list"} & tipos)}
+    assert requisitos.get(formato, True)
 
 
 def _cabeceras(html: str, elemento_id: str) -> str:

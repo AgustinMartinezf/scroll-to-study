@@ -211,5 +211,7 @@ def test_pedido_en_ingles(tmp_path, capsys):
     capsys.readouterr()
     s2s.main(["pedido", "-t", str(t), "--tema", "t01"])
     out = capsys.readouterr().out
-    assert "IDIOMA DEL VIDEO: en" in out and "example_script_en.json" in out and "CIERRE: If they ask you, say:" in out
+    assert "IDIOMA DEL VIDEO: en" in out and "CIERRE: If they ask you, say:" in out
     assert "FORMATO: historia" in out
+    assert ("EJEMPLO: prompts/ejemplos/historia.en.json (el ejemplo es de otro tema: copiá su forma, no sus elementos; "
+            "elegí los elementos que mejor muestren TU contenido)") in out

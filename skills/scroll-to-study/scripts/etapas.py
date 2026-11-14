@@ -16,14 +16,14 @@ MODOS = {
 
 # Textos del video y del pedido según el idioma del video (las reglas de arriba no cambian)
 IDIOMAS = {
-    "es": {"voz": "davefx", "ritmo": 6.15, "lexico": "lexico.json", "ejemplo": "ejemplo_guion.json",
+    "es": {"voz": "davefx", "ritmo": 6.15, "lexico": "lexico.json",
            "manana": "Mañana", "general": "método general · no está en tu material",
            "proyecto": {"pregunta": "Pregunta que te pueden hacer", "cierre": "Si te lo preguntan, decí:",
                         "titulo_final": "PARA EXPLICARLO", "decilo": "Decilo así"},
            "materia": {"pregunta": "Pregunta de examen", "cierre": "Para el examen, acordate:",
                        "titulo_final": "PARA EL EXAMEN", "decilo": "Acordate de esto"},
            "general_pedido": "método general, NO está en el material"},
-    "en": {"voz": "hfc_male", "ritmo": 4.91, "lexico": "lexico_en.json", "ejemplo": "example_script_en.json",
+    "en": {"voz": "hfc_male", "ritmo": 4.91, "lexico": "lexico_en.json",
            "manana": "Tomorrow", "general": "general method · not in your material",
            "proyecto": {"pregunta": "A question they may ask you", "cierre": "If they ask you, say:",
                         "titulo_final": "TO EXPLAIN IT", "decilo": "Say it like this"},
@@ -40,6 +40,12 @@ FORMATOS = {
     "pasos": "paso a paso: pasos que aparecen y se tildan en orden",
     "historia": "historia o caso: problema, intento, por qué falló, solución",
 }
+
+
+def ejemplo_guion(formato: str, idioma: str) -> str:
+    """El guion de ejemplo de ese formato e idioma, relativo a la carpeta del skill. Cada formato tiene uno
+    de otra materia, para que los videos no salgan todos con la misma forma (ni con la de Bases de Datos)."""
+    return f"prompts/ejemplos/{formato}.{idioma}.json"
 
 
 def elegir_formato(tema: dict[str, Any], afirm: list[dict[str, Any]], modo: str) -> str:
@@ -129,10 +135,12 @@ def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str,
     tema = temas[idx]
     afirm = _afirmaciones_del_tema(inv, tema)
     manana = temas[idx + 1]["titulo"] if idx + 1 < len(temas) else "repaso general"
-    i = IDIOMAS[idioma]; m = i[modo]
+    m = IDIOMAS[idioma][modo]
     formato = elegir_formato(tema, afirm, modo)
-    return (f"IDIOMA DEL VIDEO: {idioma} (ejemplo: prompts/{i['ejemplo']})\n"
+    return (f"IDIOMA DEL VIDEO: {idioma}\n"
             f"FORMATO: {formato} ({FORMATOS[formato]})\n"
+            f"EJEMPLO: {ejemplo_guion(formato, idioma)} (el ejemplo es de otro tema: copiá su forma, no sus "
+            "elementos; elegí los elementos que mejor muestren TU contenido)\n"
             f"Tema: {tema['titulo']}\n{m['pregunta']}: {tema['pregunta']}\n"
             f"Tema de mañana: {manana}\nCIERRE: {m['cierre']}\n\nAfirmaciones disponibles:\n"
             + _lista_afirmaciones(afirm, idioma))

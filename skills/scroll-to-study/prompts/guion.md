@@ -78,4 +78,4 @@ Write ONLY the JSON:
 In the ending, each line N needs {show flN} before the word where it appears, and "Mañana"/"Tomorrow" needs {show fnext}.
 
 # Full example
-Read the example for the video language before writing (another topic, same format): `prompts/ejemplo_guion.json` (es) or `prompts/example_script_en.json` (en).
+The request gives the EXAMPLE for its format and video language: `prompts/ejemplos/<formato>.<idioma>.json` (for example `prompts/ejemplos/pasos.en.json`). Read it before writing. Each format's example is from a different subject (networks, operating systems, math, programming, a software project), so the example is always about another topic: copy its shape, not its elements; choose the elements that best show YOUR content.

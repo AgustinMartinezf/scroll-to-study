@@ -5,7 +5,7 @@ from pathlib import Path
 
 FIX = Path(__file__).parent / "fixtures" / "biblioteca"
 EJEMPLO = json.loads((Path(__file__).resolve().parents[1] / "skills" / "scroll-to-study" / "prompts"
-                      / "ejemplo_guion.json").read_text(encoding="utf-8"))
+                      / "ejemplos" / "historia.es.json").read_text(encoding="utf-8"))
 
 INVENTARIO = {"afirmaciones": [
     {"id": "A1", "tipo": "regla", "texto": "La FK de multa es id_prestamo y apunta a prestamo.",
