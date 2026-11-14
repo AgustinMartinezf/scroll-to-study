@@ -9,6 +9,9 @@
  *   cuestionario.js, igual que en la lista de la compu, y el resultado decide cuándo vuelve el tema.
  * - Lo que pasa con el iframe del video (los avisos, retomarlo si se recarga solo y el registro de cortes)
  *   está en reproduccion.js, compartido con la lista de la compu.
+ * - Actualizaciones: al abrir la app y cada vez que vuelve a primer plano se le pide al service worker que
+ *   busque una versión nueva. Si se instala una, aparece "Hay una versión nueva de la app" con "Actualizar",
+ *   que recarga la página. Nunca se recarga sola (podría estar sonando un video).
  * - Cada video corre en un iframe sandbox (sin allow-same-origin) desde una URL blob: no puede leer los
  *   otros paquetes ni el progreso. Habla con la lista por postMessage, como en videos/index.html.
  */
@@ -55,6 +58,7 @@
       cero: "Borrar progreso", seguro: "¿Borrar todo el progreso de «{t}»?",
       exportar: "Exportar progreso", copiado: "Copiado al portapapeles",
       copiaManual: "No se pudo copiar solo: seleccioná este texto y copialo.",
+      nueva: "Hay una versión nueva de la app", actualizar: "Actualizar",
     },
     en: {
       importar: "Import videos", elegir: "Saved videos", borrar: "Delete",
@@ -91,6 +95,7 @@
       cero: "Clear progress", seguro: "Clear all progress for “{t}”?",
       exportar: "Export progress", copiado: "Copied to the clipboard",
       copiaManual: "Couldn't copy it automatically: select this text and copy it.",
+      nueva: "There is a new version of the app", actualizar: "Update",
     },
   };
   const IDIOMA = /^es\b/i.test(navigator.language || "") ? "es" : "en";
@@ -102,7 +107,8 @@
   const $ = id => document.getElementById(id);
   const v = $("v");
   for (const id of ["importar", "vTitulo", "vTexto", "vPrivado", "iTitulo", "iPaso1", "iPaso2", "iPaso3",
-                    "iSeparado", "importarIgual", "sub", "ant", "sig", "cero"]) $(id).textContent = TX[id];
+                    "iSeparado", "importarIgual", "sub", "ant", "sig", "cero", "actualizar"]) $(id).textContent = TX[id];
+  $("nuevaTxt").textContent = TX.nueva;
   $("borrarPaq").textContent = TX.borrar; $("exp").textContent = TX.exportar;
   $("lToca").textContent = TX.toca; $("lVistos").textContent = TX.vistos; $("lHoy").textContent = QX.paraHoy;
   $("paquetes").setAttribute("aria-label", TX.elegir);
@@ -433,11 +439,44 @@
   };
 
   // ---------------------------------------------------------------------------------------------
+  // actualizaciones
+  // ---------------------------------------------------------------------------------------------
+  let registro = null;
+  /** Le pide al service worker que busque una versión nueva (sin red, falla callado). */
+  function buscarVersionNueva() {
+    if (registro) registro.update().catch(() => {});
+  }
+  function hayVersionNueva() { $("nueva").hidden = false; }
+  // solo la recarga quien toca el botón: nunca sola, por si suena un video
+  $("actualizar").onclick = () => location.reload();
+
+  if ("serviceWorker" in navigator) {
+    const sw = navigator.serviceWorker;
+    // la primera instalación también cambia el controlador (clients.claim): esa no es una versión nueva
+    let controlada = !!sw.controller;
+    sw.addEventListener("controllerchange", () => { if (controlada) hayVersionNueva(); controlada = true; });
+    sw.register("sw.js")
+      .then(r => {
+        registro = r;
+        r.addEventListener("updatefound", () => {
+          const nuevo = r.installing, habia = !!sw.controller;
+          if (!nuevo || !habia) return;
+          nuevo.addEventListener("statechange", () => {
+            if (nuevo.state === "installed" || nuevo.state === "activated") hayVersionNueva();
+          });
+        });
+        if (r.waiting && sw.controller) hayVersionNueva();
+        buscarVersionNueva();
+      })
+      .catch(e => console.warn("service worker:", e));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") buscarVersionNueva();
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // arranque
   // ---------------------------------------------------------------------------------------------
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(e => console.warn("service worker:", e));
-  }
   pintarApp();
   abrirDB()
     .then(async d => {

@@ -43,6 +43,11 @@ def test_el_service_worker_cachea_todo_con_una_version_por_contenido(tmp_path, m
     assert otra != version
 
 
+def test_el_service_worker_instala_sin_la_cache_http():
+    sw = (RAIZ / "web" / "sw.js").read_text(encoding="utf-8")
+    assert 'cache: "reload"' in sw
+
+
 def test_el_service_worker_borra_las_caches_viejas_y_responde_desde_cache():
     sw = (RAIZ / "web" / "sw.js").read_text(encoding="utf-8")
     assert "caches.delete" in sw and "k !== CACHE" in sw

@@ -303,6 +303,32 @@ def test_la_cache_nueva_del_service_worker_no_sale_de_la_cache_http(contexto, si
     assert "S2S_SITIO = \"B\"" in texto_app and "S2S_SITIO = \"A\"" not in texto_app
 
 
+def test_una_version_nueva_avisa_y_actualizar_corre_el_codigo_nuevo(contexto, sitio_cambiante):
+    url, publicar = sitio_cambiante
+    page = abrir(contexto(), url)
+    page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
+    assert page.evaluate("window.S2S_SITIO") == "A"
+    page.wait_for_timeout(300)
+    assert not page.is_visible("#nueva")                    # la primera instalación no es una versión nueva
+    importar(page, paquete())
+    f = frame_del_video(page, "t01")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't01' } }, '*')")
+
+    publicar("B")
+    # volver a primer plano busca la versión nueva (en el iPhone la app casi nunca arranca de cero)
+    page.evaluate("""Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+                     document.dispatchEvent(new Event('visibilitychange'))""")
+    page.wait_for_selector("#nueva:not([hidden])", timeout=15000)
+    assert texto(page, "#nuevaTxt") == "Hay una versión nueva de la app" and texto(page, "#actualizar") == "Actualizar"
+    # no se recarga sola: sigue corriendo A, con el video donde estaba
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.S2S_SITIO") == "A" and frame_del_video(page, "t01")
+
+    page.click("#actualizar")
+    page.wait_for_function("document.documentElement.dataset.appLista === '1' && window.S2S_SITIO === 'B'")
+    assert not page.is_visible("#nueva") and texto(page, "#titulo") == "Redes"
+
+
 def test_iphone_sin_instalar_explica_como_instalarla(contexto, sitio_url):
     page = abrir(contexto(user_agent=IPHONE, locale="en-US", is_mobile=True, has_touch=True), sitio_url)
     assert page.is_visible("#instalar") and not page.is_visible("#importar") and not page.is_visible("#vacio")
