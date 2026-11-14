@@ -46,8 +46,6 @@ h1 { font:800 clamp(24px,5vw,36px)/1.1 system-ui, sans-serif; margin:0; letter-s
 .caja { position:relative; width:100%; max-width:400px; aspect-ratio:9/16; margin:0 auto; border-radius:18px; overflow:hidden;
   background:#000; border:1px solid var(--line); }
 .caja iframe { width:100%; height:100%; border:0; display:block; }
-#capa { position:absolute; inset:0; display:none; touch-action:none; }
-#capa.activa { display:block; }
 .ahora small { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
 .ahora span { font-weight:700; font-size:17px; }
 .ctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
@@ -113,11 +111,12 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
     </header>
     <div class="barra" aria-hidden="true"><i id="lleno"></i></div>
     <section class="player">
-      <div class="caja"><iframe id="v" allow="autoplay" sandbox="allow-scripts" title="video"></iframe><div id="capa"></div></div>
+      <div class="caja"><iframe id="v" allow="autoplay" sandbox="allow-scripts" title="video"></iframe></div>
       <div class="ahora"><small id="nAhora"></small><span id="tAhora"></span></div>
       <div class="ctrls">
         <button id="ant" type="button"></button>
         <button id="sig" type="button" class="prim"></button>
+        <button id="feed" type="button"></button>
       </div>
       <div class="ctrls" id="ctrls2">
         <button id="exp" type="button"></button>
@@ -133,6 +132,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 </div>
 <script src="progreso.js"></script>
 <script src="cuestionario.js"></script>
+<script src="reproduccion.js"></script>
 <script src="paquete.js"></script>
 <script src="app.js"></script>
 </body></html>

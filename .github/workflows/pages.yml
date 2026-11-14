@@ -1,5 +1,5 @@
 name: pages
-# Publishes the phone app (web/ + progreso.js + cuestionario.js) to GitHub Pages. It is only the empty player: the
+# Publishes the phone app (web/ + progreso.js + cuestionario.js + reproduccion.js) to GitHub Pages. It is only the empty player: the
 # videos are imported on each phone and never uploaded.
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - "web/**"
       - "skills/scroll-to-study/scripts/progreso.js"
       - "skills/scroll-to-study/scripts/cuestionario.js"
+      - "skills/scroll-to-study/scripts/reproduccion.js"
       - "tools/sitio.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:

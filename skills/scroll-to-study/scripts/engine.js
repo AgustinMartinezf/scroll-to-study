@@ -33,8 +33,10 @@ camEvents.concat(trav.map(([si, t]) => ({ t, travel: si }))).sort((a, b) => a.t 
     const si = e.travel, t = e.t, a = cur, b = frameOf(visAt(si, t + 1.6)) || cur;
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.min(a.s, b.s) * 0.55 };
     camTo(mid, t, 0.45, "power2.in"); camTo(b, t + 0.45, 0.6, "power3.out");
-    tl.to(W, { filter: "blur(8px)", duration: 0.3, ease: "power2.in" }, t + 0.2);
-    tl.to(W, { filter: "blur(0px)", duration: 0.35, ease: "power2.out" }, t + 0.55);
+    // el viaje se "barre" bajando la opacidad del mundo, no con un filtro: en iOS un filter animado sobre
+    // un contenedor tan grande reserva capas enormes y el proceso del video se cae a mitad del video
+    tl.to(W, { opacity: 0.45, duration: 0.3, ease: "power2.in" }, t + 0.2);
+    tl.to(W, { opacity: 1, duration: 0.35, ease: "power2.out" }, t + 0.55);
     const p = $("pth" + (si - 1)); const L = p.getTotalLength();
     gsap.set(p, { strokeDasharray: L, strokeDashoffset: L });
     tl.to(p, { strokeDashoffset: 0, duration: 0.85, ease: "power2.inOut" }, t + 0.1);
@@ -142,7 +144,7 @@ S.EV.forEach(e => {
         if (cls.contains("chart")) el.querySelectorAll(".bar").forEach((b, i) => { if (!HID.has(b.id)) crecer(b, t + 0.35 + i * 0.15); });
         if (cls.contains("chat")) { let k = 0; el.querySelectorAll(".msg").forEach(m => { if (!HID.has(m.id)) escribir(m, t + 0.4 + 0.9 * k++); }); }
       }
-      else if (cls.contains("bigt")) tl.fromTo(q(id), { opacity: 0, scale: 1.6, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.35, ease: "power4.out" }, t);
+      else if (cls.contains("bigt")) tl.fromTo(q(id), { opacity: 0, scale: 1.8 }, { opacity: 1, scale: 1, duration: 0.35, ease: "power4.out" }, t);   // sin filter (ver el viaje de cámara)
       else tl.fromTo(q(id), { opacity: 0, scale: 0.4, rotation: x.rot || -8 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.45, ease: "back.out(1.8)" }, t);
       if (cls.contains("fbox")) { const prev = el.previousElementSibling; if (prev && prev.classList.contains("farrow")) tl.fromTo(prev, { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25 }, t - 0.1); }
       break; }

@@ -27,7 +27,7 @@ addEventListener("message", e => {
   if (e.data && e.data.s2s === "pausa") parent.postMessage({ s2s: { tipo: "pausa" } }, "*");
 });
 document.addEventListener("click", () => { clics++; });
-parent.postMessage({ s2s: { tipo: "listo" } }, "*");
+parent.postMessage({ s2s: { tipo: "listo", t: 0, duracion: 40, reproducidos: 0 } }, "*");
 </script></body></html>"""
 
 
@@ -114,42 +114,184 @@ def test_borrar_progreso_con_confirmacion(navegador, lista):
     assert texto(page, "#nRacha") == "0" and texto(page, "#tToca") == "Tema 1"
 
 
-def test_deslizar_cambia_de_video_y_el_toque_llega_al_video(navegador, lista):
+def arrastrar(page, x, y0, y1, pasos=6):
+    """Un arrastre de verdad con el dedo (eventos táctiles de Chromium, como en un teléfono)."""
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y0}]})
+    for k in range(1, pasos + 1):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * k / pasos}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.detach()
+
+
+def centro(page, sel=".caja"):
+    c = page.query_selector(sel).bounding_box()
+    return c["x"] + c["width"] / 2, c["y"] + c["height"] / 2
+
+
+def sonar(f):
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 40, reproducidos: 0 } }, '*')")
+
+
+def test_modo_normal_sin_gestos_la_pagina_scrollea_y_los_toques_llegan_al_video(navegador, lista):
     page = abrir(navegador, lista, tactil=True)
     f = video(page, "t01.html")
-    caja = page.query_selector(".caja").bounding_box()
-    cx, cy = caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2
-    # con la tapa del video a la vista la capa no está: el toque llega al video ("Tocar para ver")
-    assert page.evaluate("getComputedStyle(document.getElementById('capa')).display") == "none"
-    page.touchscreen.tap(cx, cy)
+    assert texto(page, "#feed") == "Pantalla completa"
+    sonar(f)
+    page.wait_for_timeout(100)
+    cx, cy = centro(page)
+    page.touchscreen.tap(cx, cy)                                      # el toque llega al video, no a una capa
     f.wait_for_function("window.clics === 1")
-    # mientras suena, la capa toma los gestos
-    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio' } }, '*')")
-    page.wait_for_function("document.getElementById('capa').classList.contains('activa')")
-    deslizar = """([x, y, dy]) => {
-      const c = document.getElementById('capa'), o = { pointerId: 1, pointerType: 'touch', bubbles: true };
-      c.dispatchEvent(new PointerEvent('pointerdown', { ...o, clientX: x, clientY: y }));
-      c.dispatchEvent(new PointerEvent('pointerup', { ...o, clientX: x + 5, clientY: y + dy }));
-    }"""
-    page.evaluate(deslizar, [cx, cy, 0])                              # tocar = pausa
-    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'pausa')")
-    f.evaluate("parent.postMessage({ s2s: { tipo: 'sigue' } }, '*')")
-    page.wait_for_function("document.getElementById('capa').classList.contains('activa')")
-    page.evaluate(deslizar, [cx, cy, -200])                           # hacia arriba = siguiente
+    assert page.query_selector(".s2s-capa.activa") is None
+    arriba = page.evaluate("scrollY")
+    arrastrar(page, cx, cy + 150, cy - 150)                           # deslizar sobre el video hacia arriba
+    page.wait_for_timeout(500)
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")     # no cambió de video
+    assert page.evaluate("scrollY") > arriba                          # bajó la página, hacia la lista
+    assert f.evaluate("window.recibidos.filter(m => m && m.s2s === 'play').length") == 0
+
+
+def test_modo_feed_deslizar_cambia_de_video_y_la_x_vuelve_a_la_lista(navegador, lista):
+    page = abrir(navegador, lista, tactil=True)
+    f = video(page, "t01.html")
+    page.click("#feed")
+    caja = page.query_selector(".caja").bounding_box()
+    assert (caja["x"], caja["y"], caja["width"], caja["height"]) == (0, 0, 390, 844)      # toda la pantalla
+    assert page.evaluate("getComputedStyle(document.documentElement).overflow") == "hidden"
+    # el video sabe del modo (postMessage llega después, no en el mismo click)
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'feed' && m.activo === true)")
+    assert f.evaluate("window.recibidos").count({"s2s": "feed", "activo": True}) == 1
+    sonar(f)
+    page.wait_for_selector(".s2s-capa.activa")
+    # la capa deja libre la franja de abajo, donde está la barra del video
+    capa = page.query_selector(".s2s-capa").bounding_box()
+    assert capa["y"] + capa["height"] <= 844 - 48
+    page.touchscreen.tap(390 * 0.8, 400)                              # el toque pasa al video
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'toque' && m.x > 0.7 && m.x < 0.9)")
+    arrastrar(page, 195, 600, 300)                                    # hacia arriba: el siguiente
     f2 = video(page, "t02.html")
     f2.wait_for_function("window.recibidos.some(m => m && m.s2s === 'play')")
-    f2.evaluate("parent.postMessage({ s2s: { tipo: 'inicio' } }, '*')")
-    page.wait_for_function("document.getElementById('capa').classList.contains('activa')")
-    page.evaluate(deslizar, [cx, cy, 200])                            # hacia abajo = anterior
+    assert f2.evaluate("window.recibidos").count({"s2s": "feed", "activo": True}) == 1
+    page.wait_for_timeout(450)                                       # termina la transición (mientras, no hay gestos)
+    sonar(f2)
+    page.wait_for_selector(".s2s-capa.activa")
+    arrastrar(page, 195, 300, 600)                                    # hacia abajo: el anterior
     video(page, "t01.html")
+    assert page.is_visible(".s2s-salir")
+    page.click(".s2s-salir")                                          # la X vuelve a la lista
+    assert not page.evaluate("document.querySelector('.caja').classList.contains('s2s-feed')")
+    assert page.query_selector(".caja").bounding_box()["width"] < 390 and not page.is_visible(".s2s-salir")
+    assert page.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
 
 
-def test_en_escritorio_no_hay_capa(navegador, lista):
+def test_modo_feed_un_arrastre_corto_o_lento_no_cambia_de_video(navegador, lista):
+    page = abrir(navegador, lista, tactil=True)
+    f = video(page, "t01.html")
+    page.click("#feed")
+    sonar(f)
+    page.wait_for_selector(".s2s-capa.activa")
+    arrastrar(page, 195, 500, 440)                                    # 60 px: menos que el umbral
+    cdp = page.context.new_cdp_session(page)                          # 200 px en más de 1 s: muy lento
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 195, "y": 600}]})
+    for k in range(1, 6):
+        page.wait_for_timeout(250)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": 195, "y": 600 - 40 * k}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    page.wait_for_timeout(500)
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")
+
+
+def test_modo_feed_deslizar_hacia_abajo_desde_el_borde_de_arriba_sale(navegador, lista):
+    page = abrir(navegador, lista, tactil=True)
+    f = video(page, "t01.html")
+    page.click("#feed")
+    sonar(f)
+    page.wait_for_selector(".s2s-capa.activa")
+    arrastrar(page, 195, 20, 320)
+    page.wait_for_function("!document.querySelector('.caja').classList.contains('s2s-feed')")
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")
+
+
+def test_modo_feed_con_el_video_quieto_el_video_avisa_el_gesto(navegador, lista):
+    """Sin sonar no hay capa (el toque que arranca el audio tiene que ser del video): el video avisa el gesto."""
+    page = abrir(navegador, lista, tactil=True)
+    f = video(page, "t01.html")
+    page.click("#feed")
+    assert page.query_selector(".s2s-capa.activa") is None
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'deslizar', dx: 4, dy: -240, ms: 120, y0: 500, duracion: 40 } }, '*')")
+    video(page, "t02.html")
+
+
+def test_modo_feed_en_la_compu_flechas_rueda_y_esc(navegador, lista):
     page = abrir(navegador, lista)
     f = video(page, "t01.html")
-    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio' } }, '*')")
-    page.wait_for_timeout(100)
-    assert not page.evaluate("document.getElementById('capa').classList.contains('activa')")
+    page.click("#feed")
+    page.keyboard.press("ArrowDown")
+    f = video(page, "t02.html")
+    page.wait_for_timeout(450)                                       # termina la transición
+    page.keyboard.press("ArrowUp")
+    f = video(page, "t01.html")
+    page.wait_for_timeout(450)
+    sonar(f)
+    page.wait_for_selector(".s2s-capa.activa")
+    page.mouse.move(195, 400)
+    page.mouse.wheel(0, 120)                                          # la rueda: el siguiente
+    f = video(page, "t02.html")
+    page.wait_for_timeout(800)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tecla', tecla: 'ArrowDown', duracion: 40 } }, '*')")   # con el foco en el video
+    video(page, "t03.html")
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.querySelector('.caja').classList.contains('s2s-feed')")
+
+
+def test_flechas_y_espacio_en_la_pagina_van_al_video(navegador, lista):
+    page = abrir(navegador, lista)
+    f = video(page, "t01.html")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press(" ")
+    f.wait_for_function("window.recibidos.filter(m => m && m.s2s === 'tecla').map(m => m.tecla).join() === 'ArrowRight, '")
+    page.keyboard.press("ArrowDown")                                  # fuera del modo feed no cambia de video
+    page.wait_for_timeout(300)
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")
+
+
+def test_las_preguntas_en_el_modo_feed_ocupan_la_pantalla(navegador, tmp_path):
+    page = abrir(navegador, lista_con_preguntas(tmp_path), tactil=True)
+    f = video(page, "t01.html")
+    page.click("#feed")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 40 } }, '*')")
+    page.wait_for_selector(".caja .s2s-quiz")
+    q = page.query_selector(".s2s-quiz").bounding_box()
+    assert (q["x"], q["y"], q["width"], q["height"]) == (0, 0, 390, 844)
+    assert page.is_visible(".s2s-salir")                              # y se puede volver a la lista
+    page.click(".s2s-quiz >> text=Saltear preguntas")
+    video(page, "t02.html")
+    assert page.evaluate("document.querySelector('.caja').classList.contains('s2s-feed')")
+
+
+def test_si_el_video_se_recarga_solo_retoma_desde_el_ultimo_tiempo_y_anota_el_corte(navegador, lista):
+    finge = "Object.defineProperty(navigator, 'clipboard', { value: { writeText: async t => { window.copiado = t; } } });"
+    page = abrir(navegador, lista, init=finge)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0 } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 12.5 } }, '*')")
+    f.evaluate("location.reload()")                                   # como cuando iOS mata el proceso del iframe
+    f.wait_for_function("window.recibidos && window.recibidos.some(m => m && m.s2s === 'play' && m.desde === 12.5)")
+    assert page.evaluate("document.getElementById('v').src").endswith("t01.html")
+    cortes = json.loads(page.evaluate("localStorage.getItem('s2s-cortes:' + document.title)"))
+    assert len(cortes) == 1
+    c = cortes[0]
+    assert c["video"] == "t01" and c["t"] == 12.5 and c["fecha"].startswith("2026-11-12") and "Mozilla" in c["ua"]
+    assert guardado(page)["dias"] == {}                                # el registro va aparte del progreso
+    # volver a abrirlo desde la lista no es un corte: arranca desde 0
+    page.click("#lista li:nth-child(1) button")
+    f = video(page, "t01.html")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'play')")
+    assert f.evaluate("window.recibidos.filter(m => m && m.s2s === 'play').map(m => m.desde)") == [None]
+    assert len(json.loads(page.evaluate("localStorage.getItem('s2s-cortes:' + document.title)"))) == 1
+    page.click("#exp")
+    page.wait_for_function("window.copiado !== undefined")
+    assert json.loads(page.evaluate("window.copiado"))["cortes"] == cortes
 
 
 def test_exportar_copia_al_portapapeles(navegador, lista):
@@ -160,7 +302,7 @@ def test_exportar_copia_al_portapapeles(navegador, lista):
     page.wait_for_function("window.copiado !== undefined")
     x = json.loads(page.evaluate("window.copiado"))
     assert x["titulo"] == "Piloto" and x["racha"] == 2 and x["generado"].startswith("2026-11-12")
-    assert x["dias"] == {"2026-11-11": ["t02"], "2026-11-12": ["t01"]}
+    assert x["dias"] == {"2026-11-11": ["t02"], "2026-11-12": ["t01"]} and x["cortes"] == []
     assert texto(page, "#aviso") == "Copiado al portapapeles"
     assert page.query_selector("#expTxt") is None
 
@@ -314,3 +456,29 @@ def test_cambiar_de_video_cierra_las_preguntas(navegador, tmp_path):
     page.click("#lista li:nth-child(3) button")
     video(page, "t03.html")
     assert page.query_selector(".s2s-quiz") is None and guardado(page)["repaso"] == {}
+
+
+def test_solo_cuenta_como_visto_si_sono_al_menos_el_70_por_ciento(navegador, tmp_path):
+    page = abrir(navegador, lista_con_preguntas(tmp_path))
+    f = video(page, "t01.html")
+    # sonó 20 de 40 s (se saltó al final): no queda visto, no hay preguntas, no pasa al siguiente
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 20 } }, '*')")
+    page.wait_for_timeout(300)
+    assert page.query_selector(".s2s-quiz") is None and texto(page, "#nVistos") == "0 / 3"
+    assert guardado(page)["dias"] == {} and page.evaluate("document.getElementById('v').src").endswith("t01.html")
+    # "Ver de nuevo" (en el video) y esta vez sonó 29 de 40: sí
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 40, reproducidos: 0 } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 29 } }, '*')")
+    page.wait_for_selector(".caja .s2s-quiz")
+    assert guardado(page)["dias"] == {"2026-11-12": ["t01"]}
+
+
+def test_lo_que_sono_antes_de_una_recarga_sigue_contando(navegador, lista):
+    page = abrir(navegador, lista)
+    f = video(page, "t01.html")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 20, duracion: 40, reproducidos: 20 } }, '*')")
+    f.evaluate("location.reload()")
+    f.wait_for_function("window.recibidos && window.recibidos.some(m => m && m.s2s === 'play' && m.desde === 20)")
+    # el video recargado solo sabe de los últimos 10 s: con los 20 de antes son 30 de 40
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 10 } }, '*')")
+    page.wait_for_function("document.getElementById('nVistos').textContent === '1 / 3'")

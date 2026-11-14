@@ -34,9 +34,11 @@ IPHONE = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/60
 VIDEO = """<!doctype html><html><head><title>{id}</title></head>
 <body style="margin:0;height:100vh;background:#123;color:#fff">{id}<script>
 const avisar = tipo => parent.postMessage({{ s2s: {{ tipo, video: "{id}" }} }}, "*");
-window.VIDEO_ID = "{id}";
+window.VIDEO_ID = "{id}"; window.recibidos = [];
 addEventListener("message", e => {{
-  if (e.data && e.data.s2s === "play") {{ avisar("inicio"); setTimeout(() => avisar("fin"), 300); }}
+  recibidos.push(e.data);
+  // retomado tras una recarga ("desde"): se queda sonando, así el test lo puede mirar
+  if (e.data && e.data.s2s === "play") {{ avisar("inicio"); if (!e.data.desde) setTimeout(() => avisar("fin"), 300); }}
 }});
 avisar("listo");
 </script></body></html>"""
@@ -330,3 +332,74 @@ def test_saltear_preguntas_en_la_app(contexto, sitio_url):
     assert g["repaso"] == {} and g["dias"] == {"2026-11-12": ["t01", "t02"]}
     assert texto(page, "#lista li:nth-child(1) .s2s-rep") == "Al día"
     assert texto(page, "#tToca") == "Nada pendiente hoy" and texto(page, "#nHoy") == "0"
+
+
+def test_si_el_video_se_recarga_solo_la_app_lo_retoma_y_anota_el_corte(contexto, sitio_url):
+    ctx = contexto()
+    ctx.add_init_script("Object.defineProperty(navigator, 'clipboard', "
+                        "{ value: { writeText: async t => { window.copiado = t; } } });")
+    page = abrir_el_dia(ctx, sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    f = frame_del_video(page, "t01")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, video: 't01' } }, '*')")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'tiempo', t: 7.25, video: 't01' } }, '*')")
+    # un iframe sandbox no puede recargar su propia URL blob: se recarga desde afuera, sin pasar por abrir()
+    # (para la app es lo mismo que cuando iOS lo recarga solo)
+    page.evaluate("(v => { v.src = v.src; })(document.getElementById('v'))")
+    f = frame_del_video(page, "t01")
+    f.wait_for_function("window.recibidos.some(m => m && m.s2s === 'play' && m.desde === 7.25)")
+    cortes = json.loads(page.evaluate("localStorage.getItem('s2s-cortes:Redes')"))
+    assert [(c["video"], c["t"]) for c in cortes] == [("t01", 7.25)] and cortes[0]["fecha"].startswith("2026-11-12")
+    assert json.loads(page.evaluate("localStorage.getItem('s2s:Redes')"))["dias"] == {}
+    page.click("#exp")
+    page.wait_for_function("window.copiado !== undefined")
+    assert json.loads(page.evaluate("window.copiado"))["cortes"] == cortes
+
+
+def test_la_app_no_cuenta_un_video_que_casi_no_sono(contexto, sitio_url):
+    page = abrir_el_dia(contexto(), sitio_url)
+    importar(page, paquete_v2())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    f = frame_del_video(page, "t01")
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 42, duracion: 42, reproducidos: 12, video: 't01' } }, '*')")
+    page.wait_for_timeout(300)
+    assert page.query_selector(".s2s-quiz") is None and texto(page, "#nVistos") == "0 / 2"
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 42, duracion: 42, reproducidos: 30, video: 't01' } }, '*')")
+    page.wait_for_selector(".caja .s2s-quiz")
+    assert texto(page, "#nVistos") == "1 / 2"
+
+
+def test_la_app_tiene_los_dos_modos(contexto, sitio_url):
+    """Modo normal: arrastrar sobre el video no cambia de video. Feed: sí, y la X vuelve a la lista."""
+    ctx = contexto(has_touch=True, is_mobile=True)
+    page = abrir_el_dia(ctx, sitio_url)
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    f = frame_del_video(page, "t01")
+    assert texto(page, "#feed") == "Pantalla completa"
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 42, reproducidos: 0, video: 't01' } }, '*')")
+    caja = page.query_selector(".caja").bounding_box()
+    x, y = caja["x"] + caja["width"] / 2, caja["y"] + caja["height"] / 2
+    arrastrar(page, x, y + 120, y - 120)
+    page.wait_for_timeout(500)
+    assert frame_del_video(page, "t01") and page.query_selector(".s2s-capa.activa") is None
+
+    page.click("#feed")
+    caja = page.query_selector(".caja").bounding_box()
+    assert (caja["x"], caja["y"], caja["width"], caja["height"]) == (0, 0, 390, 844)
+    f.evaluate("parent.postMessage({ s2s: { tipo: 'inicio', t: 0, duracion: 42, reproducidos: 0, video: 't01' } }, '*')")
+    page.wait_for_selector(".s2s-capa.activa")
+    arrastrar(page, 195, 600, 250)
+    frame_del_video(page, "t02")
+    page.click(".s2s-salir")
+    assert not page.evaluate("document.querySelector('.caja').classList.contains('s2s-feed')")
+
+
+def arrastrar(page, x, y0, y1, pasos=6):
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y0}]})
+    for k in range(1, pasos + 1):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * k / pasos}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.detach()

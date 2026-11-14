@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Builds the phone app's site (what GitHub Pages publishes) into a folder, to test it locally.
 
-    python3 tools/sitio.py [_site]          # web/ + progreso.js + cuestionario.js -> _site/
+    python3 tools/sitio.py [_site]          # web/ + progreso.js + cuestionario.js + reproduccion.js -> _site/
     python3 -m http.server -d _site 8000    # then open http://localhost:8000/
     python3 tools/sitio.py --iconos         # regenerate web/iconos/ from .claude-plugin/icon.png (needs Pillow)
 
-progreso.js and cuestionario.js have a single source (skills/scroll-to-study/scripts/, shared with the
+progreso.js, cuestionario.js and reproduccion.js have a single source (skills/scroll-to-study/scripts/, shared with the
 computer playlist) and are copied here, not kept in web/. The service worker gets a version (a hash of every file of the site) and the list of
 files to cache, so every published change uses a new cache. .github/workflows/pages.yml runs this same
 script.
@@ -22,7 +22,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 WEB = RAIZ / "web"
 PROGRESO = RAIZ / "skills" / "scroll-to-study" / "scripts" / "progreso.js"
 CUESTIONARIO = PROGRESO.with_name("cuestionario.js")
-COMPARTIDOS = (PROGRESO, CUESTIONARIO)       # una sola fuente, compartida con la lista de la compu
+REPRODUCCION = PROGRESO.with_name("reproduccion.js")
+COMPARTIDOS = (PROGRESO, CUESTIONARIO, REPRODUCCION)       # una sola fuente, compartida con la lista de la compu
 ICONO = RAIZ / ".claude-plugin" / "icon.png"
 ICONOS = {"icono-192.png": 192, "icono-512.png": 512, "apple-touch-icon.png": 180}
 

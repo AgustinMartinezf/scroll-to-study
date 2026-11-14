@@ -58,7 +58,7 @@ def main() -> int:
         if desfase > 40:
             problemas.append(f"la animación va {desfase:.0f} ms desfasada del audio")
         p.click("#root")
-        p.evaluate("document.getElementById('s2s-tapa').hidden = true; document.getElementById('s2s-barra').style.display = 'none'")
+        p.evaluate("document.getElementById('s2s-tapa').hidden = true; document.getElementById('s2s-pista').style.display = 'none'")
 
         # 2) zonas seguras y 3) imagen quieta
         fuera, quieto, previo, desde, racha = [], [], None, None, {}

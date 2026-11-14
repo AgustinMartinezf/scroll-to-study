@@ -35,8 +35,9 @@ your material ──► inventory of statements ──► checked by code (verba
 - Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your
   computer or phone, offline. The playlist is at `scroll-to-study/videos/index.html`. It remembers, in
   that browser only, which days you watched each video, opens the one that is up today and shows your
-  streak; "Export progress" copies that history as JSON so you can share it. On a touch screen, swipe
-  up or down on a playing video for the next or previous one.
+  streak; "Export progress" copies that history as JSON so you can share it. You can drag the progress
+  bar, double tap a side of the video to go 5 seconds back or forward, and "Full screen" lets you swipe
+  from one video to the next (see [On your phone](#on-your-phone)).
 - After each video come 2 or 3 multiple-choice questions on its topic, checked against the same
   statements as the script. Your answers decide when the topic comes back (see [Review](#review)).
 - With an exercise sheet and no theory, it does not solve your exercises: it teaches how to recognize
@@ -152,6 +153,21 @@ player; your videos never go there. You import them from a file and they stay st
 The app asks the browser to keep its storage (so the phone does not clear it when it runs low on
 space) and shows how much it uses.
 
+**Controls.** They are the same in the app and in the playlist on your computer:
+
+- Tap the video to pause or resume.
+- Drag the bar at the bottom of the video to move through it; while you drag you see that moment.
+- Double tap the left or right third of the video to go 5 seconds back or forward (keep tapping to
+  keep going). On a computer, the left and right arrows do the same and space pauses.
+- Below the player, the page scrolls normally down to the list, and the buttons change video.
+- "Full screen" opens a feed: the video fills the screen and you swipe up for the next one and down
+  for the previous one. The X in the corner, or a swipe down from the top edge, goes back to the list.
+  On a computer, the up and down arrows or the mouse wheel change video and Esc leaves.
+- A video counts as watched, and its questions come up, once at least 70 % of it has played.
+
+Videos made with a version before 0.4.0 keep the old player, without these controls: ask Claude to
+remake them (`s2s.py videos --todo -t scroll-to-study`, then `s2s.py paquete` for the phone).
+
 **Alternative: MP4.** If you prefer plain video files, ask Claude to export them to MP4 (or run
 `s2s.py mp4 -t scroll-to-study`): each video becomes `scroll-to-study/mp4/t01.mp4`, …, which you can
 send to your phone and watch offline in Photos or WhatsApp, without progress tracking. It is optional
@@ -194,7 +210,7 @@ the animation follows the audio, that nothing important falls outside the TikTok
 zones, and that the picture never stays still for more than a second (needs `playwright`).
 
 The phone app is in `web/`. `tools/sitio.py` builds the published site into `_site/` (it adds
-`progreso.js` and `cuestionario.js`, which only live in `skills/scroll-to-study/scripts/`, and versions
+`progreso.js`, `cuestionario.js` and `reproduccion.js`, which only live in `skills/scroll-to-study/scripts/`, and versions
 the service worker's cache); serve it with `python -m http.server -d _site 8000` to try it. `.github/workflows/pages.yml`
 publishes it to GitHub Pages on every push to `main` that touches it. Its tests
 (`tests/test_app_web.py`, and `tests/test_lista_navegador.py` for the playlist) need `playwright` with
@@ -215,6 +231,7 @@ neither Piper nor network. The code is in `skills/scroll-to-study/scripts/` (nam
 | `mp4.py` | Optional: exports a video `.html` to `.mp4` with Playwright and ffmpeg |
 | `paquete.py` | Puts every video in one `.s2s.json` for the phone app |
 | `progreso.js` + `cuestionario.js` | Progress and review (pure functions) and the questions after each video; shared by the playlist and the phone app |
+| `reproduccion.js` | What the playlist and the phone app say to the video's iframe: resuming a video whose iframe reloaded by itself, and the log of those cuts |
 | `diagnostico.py` | Checks Python, the packages, the voices, gsap and KaTeX, and says how to fix what is missing |
 
 ## License
