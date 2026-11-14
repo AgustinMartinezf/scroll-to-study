@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,68 @@ def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str,
             f"Tema: {tema['titulo']}\n{m['pregunta']}: {tema['pregunta']}\n"
             f"Tema de mañana: {manana}\nCIERRE: {m['cierre']}\n\nAfirmaciones disponibles:\n"
             + _lista_afirmaciones(afirm, idioma))
+
+
+# ---------------------------------------------------------------------------
+# validar un guion (lo que hace s2s.py guion, sin tocar archivos)
+# ---------------------------------------------------------------------------
+
+AQUI = Path(__file__).resolve().parent
+
+
+def validar_guion(guion: dict[str, Any], inv: dict[str, Any], idioma: str = "es",
+                  modo: str = "proyecto") -> tuple[dict[str, Any], list[str], list[str]]:
+    """Compila el guion como s2s.py guion: léxico del idioma más el del guion, textos del cierre según el
+    modo, íconos permitidos y fuentes contra el inventario. Devuelve (spec, errores, avisos)."""
+    from compile import compilar
+    i = IDIOMAS[idioma]; tx = {**i, **i[modo]}
+    lex = {k.lower(): v for k, v in leer(AQUI / tx["lexico"]).items()}
+    lex.update({k.lower(): v for k, v in guion.get("lexico", {}).items()})
+    guion["idioma"] = idioma
+    if isinstance(guion.get("final"), dict):
+        guion["final"].setdefault("titulo", tx["titulo_final"])
+        guion["final"].setdefault("decilo", tx["decilo"])
+        # titulo, decilo y etiqueta_manana se pueden pisar desde el guion (la guía del README lo hace)
+        guion["final"].setdefault("etiqueta_manana", f"{tx['manana']}: {guion['final'].get('mañana', '')}")
+    spec, rep = compilar(guion, lex, AQUI / "iconos", inv, ritmo=tx["ritmo"])
+    return spec, rep.errores, rep.avisos
+
+
+# La herramienta nació para un obligatorio de Bases de Datos: un ícono de base de datos en un video de
+# otra materia (los pares de claves de DNSSEC en una «tabla» con un cilindro) confunde más de lo que ayuda.
+ICONOS_BD = ("database", "table")
+TEMA_BD = re.compile(r"\b(tablas?|tables?|sql|bases? de datos|databases?|columnas?|columns?|consultas?|"
+                     r"quer(?:y|ies)|fks?|pks?|claves? primarias?|claves? for[aá]neas?)\b", re.IGNORECASE)
+
+
+def iconos_de(e: Any) -> list[str]:
+    """Todos los íconos que pide un elemento: su «icon» y los de lo que lleva adentro (cajas de un flow,
+    chips de un row, renglones de una list, que lo llevan en la tercera posición)."""
+    if isinstance(e, list):
+        return [i for x in e for i in iconos_de(x)]
+    if not isinstance(e, dict):
+        return []
+    out = [e["icon"]] if isinstance(e.get("icon"), str) else []
+    for k, v in e.items():
+        if k == "items" and e.get("type") == "list" and isinstance(v, list):
+            out += [it[2] for it in v if isinstance(it, list) and len(it) > 2 and isinstance(it[2], str)]
+        elif isinstance(v, (dict, list)):
+            out += iconos_de(v)
+    return out
+
+
+def avisos_iconos(guion: dict[str, Any], afirm: list[dict[str, Any]]) -> list[str]:
+    """AVISO por cada ícono database o table si ninguna afirmación del tema habla de bases de datos."""
+    if any(TEMA_BD.search(f"{a.get('texto', '')} {a.get('cita', '')}") for a in afirm):
+        return []
+    avisos = []
+    for b, bloque in enumerate(guion.get("bloques", [])):
+        for e in bloque.get("elementos", []):
+            for ic in dict.fromkeys(iconos_de(e)):
+                if ic in ICONOS_BD:
+                    avisos.append(f"bloque {b} ({e.get('type')} {e.get('id')}): el ícono {ic} no tiene que ver "
+                                  "con este tema; sacalo o elegí otro")
+    return avisos
 
 
 # ---------------------------------------------------------------------------

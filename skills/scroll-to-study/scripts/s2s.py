@@ -40,14 +40,12 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 
 import fuentes                                      # noqa: E402
-from compile import compilar                        # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
-from etapas import (IDIOMAS, MODOS, aplicar_respaldo, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
+from etapas import (IDIOMAS, MODOS, aplicar_respaldo, avisos_iconos, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
                     huella, leer, modo_de, preguntas_listas, textos,
-                    pedido_guion, pedido_preguntas, pedido_respaldo, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
+                    pedido_guion, pedido_preguntas, pedido_respaldo, validar_guion, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
                     resumen_inventario, separar_errores)
 
-ICONOS = AQUI / "iconos"          # solo los íconos permitidos (y que existen en el motor)
 MAX_INTENTOS = 3
 
 DESCARGAS = {
@@ -290,17 +288,10 @@ def cmd_guion(a: argparse.Namespace) -> int:
     intento = previo.get("intentos", 0) + 1
     try:
         guion = leer(carpeta / "guion.json")
-        tx = textos(t)
-        lex = {k.lower(): v for k, v in leer(AQUI / tx["lexico"]).items()}
-        lex.update({k.lower(): v for k, v in guion.get("lexico", {}).items()})
-        guion["idioma"] = idioma_de(t)
-        if isinstance(guion.get("final"), dict):
-            guion["final"].setdefault("titulo", tx["titulo_final"])
-            guion["final"].setdefault("decilo", tx["decilo"])
-            # titulo, decilo y etiqueta_manana se pueden pisar desde el guion (la guía del README lo hace)
-            guion["final"].setdefault("etiqueta_manana", f"{tx['manana']}: {guion['final'].get('mañana', '')}")
-        spec, rep = compilar(guion, lex, ICONOS, leer(t / "inventario.json"), ritmo=tx["ritmo"])
-        errores, avisos = rep.errores, rep.avisos
+        inv = leer(t / "inventario.json")
+        spec, errores, avisos = validar_guion(guion, inv, idioma_de(t), modo_de(t))
+        tema = _tema(t, a.tema)
+        avisos += avisos_iconos(guion, [x for x in inv["afirmaciones"] if x["id"] in tema.get("afirmaciones", [])])
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
         spec, errores, avisos = {}, [f"el JSON no se pudo leer: {e}"], []
     arreglar, preguntar = separar_errores(errores)

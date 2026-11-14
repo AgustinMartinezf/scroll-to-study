@@ -44,3 +44,74 @@ def test_sin_icon_no_hay_icono_por_defecto(tmp_path):
         cabeza = _cabeceras(html, i)
         assert "<svg" not in cabeza and "<span>" in cabeza     # el título solo
     assert "<svg" in _cabeceras(html, "c")                     # con «icon», el ícono sigue
+
+
+# ---------------------------------------------------------------------------
+# un trabajo de Redes armado a mano (lo que dejarían corpus, verificar y temas)
+# ---------------------------------------------------------------------------
+
+REDES = [
+    {"id": "A1", "tipo": "definicion", "texto": "TCP abre una conexión con tres mensajes: SYN, SYN-ACK y ACK.",
+     "fuente": "redes.txt:1", "cita": "SYN, SYN-ACK y ACK", "estado": "ok", "motivos": []},
+    {"id": "A2", "tipo": "propiedad", "texto": "El cliente manda SYN con su número de secuencia inicial.",
+     "fuente": "redes.txt:2", "cita": "SYN con su número de secuencia inicial", "estado": "ok", "motivos": []},
+    {"id": "A3", "tipo": "propiedad", "texto": "El servidor responde SYN-ACK y el cliente confirma con ACK.",
+     "fuente": "redes.txt:3", "cita": "responde SYN-ACK", "estado": "ok", "motivos": []},
+]
+
+
+def guion_redes(icono="database"):
+    servidor = {"id": "srv", "text": "servidor"}
+    if icono:
+        servidor["icon"] = icono
+    return {
+        "bloques": [{"fuentes": ["A1", "A2"], "comprobar": [], "elementos": [
+            {"type": "flow", "id": "hs", "items": [{"id": "cli", "text": "cliente", "icon": "users"}, servidor]}],
+            "frases": ["¿Cómo {show hs}arranca una conexión TCP? Con tres {send hs de=cli a=srv texto=SYN}mensajes.",
+                       "El servidor {send hs de=srv a=cli texto=SYN-ACK}responde, y el cliente {send hs de=cli a=srv texto=ACK}confirma."]},
+            {"fuentes": ["A3"], "comprobar": [], "elementos": [{"type": "big", "id": "b", "text": "3 mensajes"}],
+             "frases": ["Son {show b}{boom b +0.2}[+tres] mensajes."]}],
+        "final": {"frases": ["Para el examen, [+acordate]: {show fl1}tres mensajes.", "{show fnext}Mañana: ventanas de TCP."],
+                  "lineas": ["<b>SYN, SYN-ACK, ACK</b>"], "mañana": "ventanas de TCP"},
+        "lexico": {"syn": "sin", "syn-ack": "sin~ac", "ack": "ac", "tcp": "te~ce~pe"},
+    }
+
+
+def trabajo(tmp_path, afirmaciones=REDES, temas=None):
+    import etapas
+    t = tmp_path / "trabajo"
+    etapas.escribir(t / "origen.json", {"modo": "materia", "idioma": "es", "estilo": "cuaderno"})
+    etapas.escribir(t / "inventario.json", {"afirmaciones": afirmaciones})
+    ids = [a["id"] for a in afirmaciones]
+    etapas.escribir(t / "temas.json", {"temas": temas or [
+        {"id": "t01", "titulo": "El saludo de TCP", "pregunta": "¿Por qué tres mensajes?", "afirmaciones": ids},
+        {"id": "t02", "titulo": "Ventanas de TCP", "pregunta": "¿Qué es la ventana?", "afirmaciones": ids},
+        {"id": "t03", "titulo": "Cierre de TCP", "pregunta": "¿Cómo se cierra?", "afirmaciones": ids}]})
+    return t
+
+
+def correr_guion(t, tema, guion, capsys):
+    import s2s
+    capsys.readouterr()
+    (t / tema).mkdir(exist_ok=True)
+    (t / tema / "guion.json").write_text(json.dumps(guion, ensure_ascii=False), encoding="utf-8")
+    codigo = s2s.main(["guion", "-t", str(t), "--tema", tema])
+    return codigo, capsys.readouterr().out
+
+
+def test_icono_database_fuera_de_tema(tmp_path, capsys):
+    t = trabajo(tmp_path)
+    codigo, out = correr_guion(t, "t01", guion_redes("database"), capsys)
+    assert codigo == 0                                        # es un aviso: el skill lo trata como error
+    assert "AVISO      bloque 0 (flow hs): el ícono database no tiene que ver con este tema; sacalo o elegí otro" in out
+    _, out = correr_guion(t, "t01", guion_redes("table"), capsys)
+    assert "el ícono table no tiene que ver" in out
+    _, out = correr_guion(t, "t01", guion_redes(None), capsys)
+    assert "no tiene que ver" not in out
+
+
+def test_icono_database_en_un_tema_de_bases_de_datos(tmp_path, capsys):
+    bd = [dict(a) for a in REDES]
+    bd[0]["texto"] = "La tabla conexion guarda los tres mensajes: SYN, SYN-ACK y ACK."
+    codigo, out = correr_guion(trabajo(tmp_path, bd), "t01", guion_redes("database"), capsys)
+    assert codigo == 0 and "no tiene que ver" not in out
