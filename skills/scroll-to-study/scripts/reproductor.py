@@ -496,6 +496,7 @@ li.visto .num { background:var(--ok); color:var(--ok-ink); border-radius:999px; 
 <script>__REPRODUCCION__</script>
 <script>
 const VIDEOS = __VIDEOS__, TX = __TX__, P = window.Progreso, C = window.Cuestionario;
+window.Reproduccion.prepararAudio(document);   // el audio suena con el iPhone en modo silencio (reproduccion.js)
 const IDIOMA = document.documentElement.lang, QX = C.textos(IDIOMA);
 const CLAVE = "s2s:" + document.title, hoy = () => P.fechaLocal(new Date());
 let st = P.vacio(VIDEOS);

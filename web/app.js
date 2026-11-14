@@ -15,6 +15,9 @@
 (function () {
   "use strict";
   const P = window.Progreso, PQ = window.Paquete, C = window.Cuestionario;
+  // que el audio de los videos suene con el iPhone en modo silencio (reproduccion.js): también se pide dentro
+  // del video, pero en la app instalada lo que cuenta es la página principal
+  window.Reproduccion.prepararAudio(document);
 
   const TEXTOS = {
     es: {

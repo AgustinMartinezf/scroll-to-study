@@ -482,3 +482,32 @@ def test_lo_que_sono_antes_de_una_recarga_sigue_contando(navegador, lista):
     # el video recargado solo sabe de los últimos 10 s: con los 20 de antes son 30 de 40
     f.evaluate("parent.postMessage({ s2s: { tipo: 'fin', t: 40, duracion: 40, reproducidos: 10 } }, '*')")
     page.wait_for_function("document.getElementById('nVistos').textContent === '1 / 3'")
+
+
+# --- el audio con el iPhone en modo silencio (reproduccion.js, prepararAudio) ------------------------------
+
+# finge navigator.audioSession (iOS 17 o más) y anota los Audio() que se crean
+AUDIO_SESSION = ("Object.defineProperty(navigator, 'audioSession', "
+                 "{ configurable: true, value: { type: 'auto' } });")
+ESPIA_AUDIO = """window.audios = []; const _Audio = window.Audio;
+window.Audio = function (src) { const a = new _Audio(src); audios.push(a); return a; };"""
+
+
+@pytest.mark.parametrize("ios", [False, True])
+def test_la_lista_pide_playback_y_arranca_el_silencio_en_el_primer_toque(navegador, lista, ios):
+    errores = []
+    page = abrir(navegador, lista, init=(AUDIO_SESSION if ios else "") + ESPIA_AUDIO)
+    page.on("pageerror", lambda e: errores.append(str(e)))
+    page.reload()                                  # para escuchar los errores desde el arranque
+    video(page, "t01.html")
+    assert page.evaluate("!!navigator.audioSession") == ios
+    if ios:
+        assert page.evaluate("navigator.audioSession.type") == "playback"
+    assert page.evaluate("audios.length") == 0      # nada antes de que la persona toque algo
+    page.click("#sig")
+    page.wait_for_function("audios.length === 1")
+    assert page.evaluate("[audios[0].loop, audios[0].src.startsWith('data:audio/mpeg;base64,')]") == [True, True]
+    page.click("#ant")
+    page.wait_for_timeout(200)
+    assert page.evaluate("audios.length") == 1      # uno solo, en bucle
+    assert errores == []

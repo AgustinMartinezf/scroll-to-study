@@ -396,6 +396,35 @@ def test_la_app_tiene_los_dos_modos(contexto, sitio_url):
     assert not page.evaluate("document.querySelector('.caja').classList.contains('s2s-feed')")
 
 
+@pytest.mark.parametrize("ios", [False, True])
+def test_la_app_pide_playback_y_arranca_el_silencio_en_el_primer_toque(contexto, sitio_url, ios):
+    """Que el audio suene con el iPhone en modo silencio: la categoría "playback" se pide en la página principal
+    (dentro del iframe del video no alcanza) y el primer toque arranca un <audio> de silencio en bucle. Anda
+    igual con o sin navigator.audioSession."""
+    ctx = contexto()
+    if ios:
+        ctx.add_init_script("Object.defineProperty(navigator, 'audioSession', "
+                            "{ configurable: true, value: { type: 'auto' } });")
+    ctx.add_init_script("window.audios = []; const _Audio = window.Audio;"
+                        "window.Audio = function (src) { const a = new _Audio(src); audios.push(a); return a; };")
+    errores = []
+    page = ctx.new_page()
+    page.on("pageerror", lambda e: errores.append(str(e)))
+    page.clock.set_fixed_time(HOY)
+    page.goto(sitio_url)
+    page.wait_for_function("document.documentElement.dataset.appLista === '1'")
+    assert page.evaluate("!!navigator.audioSession") == ios
+    if ios:
+        assert page.evaluate("navigator.audioSession.type") == "playback"
+    importar(page, paquete())
+    page.wait_for_selector("#reproductor:not([hidden])")
+    assert page.evaluate("audios.length") == 0
+    page.click("#sig")
+    page.wait_for_function("audios.length === 1")
+    assert page.evaluate("[audios[0].loop, audios[0].src.startsWith('data:audio/mpeg;base64,')]") == [True, True]
+    assert errores == []
+
+
 def arrastrar(page, x, y0, y1, pasos=6):
     cdp = page.context.new_cdp_session(page)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y0}]})

@@ -51,6 +51,30 @@
   const BORDE = 56;           // px desde arriba: deslizar hacia abajo desde ahí sale del modo feed
   const FRANJA = 56;          // px de abajo que la capa deja libres para la barra del video
   const numero = x => typeof x === "number" && isFinite(x);
+  // 0,1 s de silencio en MP3 (el mismo que usa el video, de reproductor.mp3_silencio)
+  const SILENCIO_MP3 = "//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAAFAAADqQAzMzMzMzMzMzMzMzMzMzMzMzMzZmZmZmZmZmZmZmZmZmZmZmZmZmaZmZmZmZmZmZmZmZmZmZmZmZmZmczMzMzMzMzMzMzMzMzMzMzMzMzM//////////////////////////8AAAA8TEFNRTMuMTAwBK8AAAAAAAAAADUgJAMGTQABzAAAA6nhvUxaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkIg/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGRED/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZGYP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkiA/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==";
+
+  /** Audio en el iPhone con el modo silencio puesto, desde la página que contiene al video. Pide la categoría
+   *  "playback" (iOS 17 o más; dentro del iframe del video no alcanza) y, en el primer toque sobre un botón, arranca
+   *  en bucle un <audio> de silencio: usa el canal "media", que suena en modo silencio (respaldo para iOS de antes
+   *  de navigator.audioSession). Todo en try: si algo falla, la página anda igual. */
+  function prepararAudio(doc) {
+    const nav = doc.defaultView.navigator;
+    try { if (nav.audioSession) nav.audioSession.type = "playback"; } catch (e) {}
+    let silencio = null;
+    function primerToque(e) {
+      const t = e.target;
+      if (silencio || !t || !t.closest || !t.closest("button")) return;
+      try {
+        const a = new doc.defaultView.Audio("data:audio/mpeg;base64," + SILENCIO_MP3);
+        a.loop = true; silencio = a;
+        const pr = a.play();
+        if (pr && pr.then) pr.then(() => doc.removeEventListener("click", primerToque, true), () => { silencio = null; });
+        else doc.removeEventListener("click", primerToque, true);
+      } catch (err) { silencio = null; }
+    }
+    doc.addEventListener("click", primerToque, true);
+  }
 
   const TEXTOS = {
     es: { feed: "Pantalla completa", salir: "Volver a la lista" },
@@ -276,6 +300,6 @@ html.s2s-feed-abierto, html.s2s-feed-abierto body { overflow:hidden; }
     return { cargar, detener, cortes, enviar, sonando: () => sonando, feed: () => enFeed, entrar, salir };
   }
 
-  return { TOPE_CORTES, MINIMO_VISTO, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, sumarCorte, contarComoVisto,
+  return { TOPE_CORTES, MINIMO_VISTO, prepararAudio, UMBRAL, VELOCIDAD, BORDE, TEXTOS, cargarCortes, sumarCorte, contarComoVisto,
            gesto, conectar };
 });
