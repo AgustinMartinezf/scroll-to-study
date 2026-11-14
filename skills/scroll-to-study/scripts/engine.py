@@ -72,6 +72,10 @@ KIND = {k: tuple(v) for k, v in TEMA["kind"].items()}
 SK = '<i class="sk" data-layout-allow-occlusion></i>'
 
 # ---------- elementos ----------
+def cabeza_icono(e, size):
+    """El ícono de la cabecera, solo si el guion lo pide: sin «icon», el título va solo (no hay ícono por defecto)."""
+    return icon(e["icon"], size, TP["cabeza"]) if e.get("icon") else ""
+
 def el_table(e):
     cols = e["cols"]; w = e.get("weights", [1] * len(cols)); wid = e.get("w", 960)
     gt = "70px " + " ".join(f"{x}fr" for x in w)
@@ -85,7 +89,7 @@ def el_table(e):
     h = 120 + 86 + 108 * len(e.get("rows", [])) + 24
     tag = f'<span class="ttag">{H.escape(e["tag"])}</span>' if e.get("tag") else ""
     return (f'<div class="card tbl" id="{e["id"]}" style="width:{wid}px;">'
-            f'<div class="chead">{icon(e.get("icon","database"), 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span>{tag}</div>'
+            f'<div class="chead">{cabeza_icono(e, 52)}<span>{H.escape(e["title"])}</span>{tag}</div>'
             f'<div class="hrow" style="grid-template-columns:{gt}"><div></div>{hcells}</div>{rows}</div>'), wid, h
 
 def el_chip(e):
@@ -121,7 +125,7 @@ def el_dialog(e):
 
 def el_console(e):
     lines = "".join(f'<div class="tyl" id="{e["id"]}-l{i}" data-n="{len(re.sub(r"<[^>]+>","",l))}">{l}</div>' for i, l in enumerate(e["lines"]))
-    return (f'<div class="card console" id="{e["id"]}"><div class="chead" style="color:#9fdcb8">{icon("terminal-window",52,"#9fdcb8")}<span>{H.escape(e.get("title","mysql>"))}</span></div>'
+    return (f'<div class="card console" id="{e["id"]}"><div class="chead" style="color:#9fdcb8">{icon("terminal-window",52,"#9fdcb8")}<span>{H.escape(e.get("title","terminal"))}</span></div>'
             f'<div class="tybox">{lines}</div></div>'), 960, 120 + 70 * len(e["lines"]) + 30
 
 def el_list(e):
@@ -130,7 +134,7 @@ def el_list(e):
         iid, txt = it[0], it[1]
         ic = icon(it[2], 58, it[3] if len(it) > 3 else TP["cabeza"]) if len(it) > 2 and it[2] else ""
         items += f'<div class="li" id="{iid}">{ic}<span>{txt}</span>{SK}</div>'
-    head = f'<div class="lhead">{icon(e.get("icon","list-checks"),50,TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    head = f'<div class="lhead">{cabeza_icono(e, 50)}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
     return (f'<div class="card lcard" id="{e["id"]}">{head}{items}</div>'), 960, (90 if e.get("title") else 30) + 84 * len(e["items"]) + 40
 
 def el_arrow(e):
@@ -186,7 +190,7 @@ def el_chart(e):
         rows += (f'<div class="bar" id="{e["id"]}-b{i}"><span class="blab">{H.escape(str(lab))}</span>'
                  f'<span class="btrack"><span class="bfill" style="width:{100 * v / mx:.1f}%"></span></span>'
                  f'<span class="bval">{val}</span></div>')
-    head = f'<div class="chead">{icon(e.get("icon", "chart-bar"), 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    head = f'<div class="chead">{cabeza_icono(e, 52)}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
     return f'<div class="card chart" id="{e["id"]}">{head}<div class="bars">{rows}</div></div>', 960, (110 if head else 40) + 96 * len(bars) + 30
 
 def el_formula(e):
@@ -228,7 +232,7 @@ def el_venn(e):
     circ = "".join(f'<circle class="vcir" cx="{cx+x}" cy="{cy+y}" r="{r}"/>' for x, y in g["c"])
     noms = "".join(f'<text class="vnom" x="{cx+x}" y="{cy+y}" text-anchor="middle">{H.escape(s)}</text>'
                    for (x, y), s in zip(g["nom"], e["sets"]))
-    head = f'<div class="chead">{icon("list-checks", 52, TP["cabeza"])}<span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    head = f'<div class="chead"><span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
     svg = (f'<svg viewBox="0 0 {W_} {H_}" width="{W_}" height="{H_}"><defs>{"".join(defs)}</defs>'
            f'<rect class="vuni" x="4" y="4" width="{W_-8}" height="{H_-8}" rx="40"/>{"".join(regs)}{circ}{noms}{"".join(labs)}</svg>')
     return f'<div class="card venn" id="{vid}">{head}<div class="vbox">{svg}</div></div>', 860, H_ + (110 if head else 40)

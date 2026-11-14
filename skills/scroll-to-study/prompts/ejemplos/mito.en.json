@@ -1,0 +1,53 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "dialog", "id": "nov", "char": "novato", "text": "fork() copies all the memory, right?"},
+    {"type": "chip", "id": "mal", "text": "fork() copies all the memory", "kind": "bad", "mono": true}
+   ],
+   "frases": [
+    "Does calling {show nov}fork copy all of a process's memory?",
+    "It seems obvious: the child is an exact {show mal}[-copy] of the parent.",
+    "But on modern systems, {strike mal}it does not."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "row", "id": "comp", "items": [{"id": "pa", "text": "parent", "kind": "blue"}, {"id": "hi", "text": "child", "kind": "purple"}]},
+    {"type": "chip", "id": "pag", "text": "same pages, read-only", "kind": "neutral", "icon": "lock"}
+   ],
+   "frases": [
+    "After the fork, {show comp}parent and child [+share] the same memory pages.",
+    "Nothing has been copied yet.",
+    "The system {show pag}marks them as read-only."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "flow", "id": "cw", "items": [{"id": "w1", "text": "writes"}, {"id": "w2", "text": "page fault", "kind": "warn"}, {"id": "w3", "text": "copy", "kind": "good"}]},
+    {"type": "chip", "id": "cow", "text": "copy-on-write", "kind": "good", "mono": true, "icon": "check-circle"}
+   ],
+   "frases": [
+    "When one of them {show w1}writes, a {show w2}page fault goes off.",
+    "Only then does the system {show w3}copy that page, and [+only] that one.",
+    "If nobody writes, that page is never copied.",
+    "This {show cow}{boom cow +0.3}is called copy-on-write."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "For the exam, [+remember]: fork {show fl1}does not copy everything; {show fl2}each page is copied when someone writes to it.",
+   "{show fnext}Tomorrow: what exec does."
+  ],
+  "lineas": ["<b>fork</b> shares the pages at first", "<b>copy-on-write</b>: a page is copied when written"],
+  "mañana": "what exec does"
+ },
+ "lexico": {}
+}

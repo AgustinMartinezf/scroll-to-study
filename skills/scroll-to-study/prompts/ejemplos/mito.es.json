@@ -1,0 +1,53 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "dialog", "id": "nov", "char": "novato", "text": "fork() copia toda la memoria, ¿no?"},
+    {"type": "chip", "id": "mal", "text": "fork() copia toda la memoria", "kind": "bad", "mono": true}
+   ],
+   "frases": [
+    "¿Llamar a {show nov}fork copia toda la memoria del proceso?",
+    "Parece obvio: el hijo es una {show mal}[-copia] exacta del padre.",
+    "Pero en los sistemas modernos, {strike mal}no es así."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "row", "id": "comp", "items": [{"id": "pa", "text": "padre", "kind": "blue"}, {"id": "hi", "text": "hijo", "kind": "purple"}]},
+    {"type": "chip", "id": "pag", "text": "mismas páginas, solo lectura", "kind": "neutral", "icon": "lock"}
+   ],
+   "frases": [
+    "Después del fork, {show comp}padre e hijo [+comparten] las mismas páginas de memoria.",
+    "Todavía no se copió nada.",
+    "El sistema las marca como de {show pag}solo lectura."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "flow", "id": "cw", "items": [{"id": "w1", "text": "escribe"}, {"id": "w2", "text": "falla de pág.", "kind": "warn"}, {"id": "w3", "text": "copia", "kind": "good"}]},
+    {"type": "chip", "id": "cow", "text": "copy-on-write", "kind": "good", "mono": true, "icon": "check-circle"}
+   ],
+   "frases": [
+    "Cuando uno de los dos {show w1}escribe, salta una {show w2}falla de página.",
+    "Recién ahí el sistema {show w3}copia esa página, y [+solo] esa.",
+    "Si nadie escribe, esa página no se copia nunca.",
+    "Eso {show cow}{boom cow +0.3}se llama copy-on-write."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "Para el examen, [+acordate]: fork {show fl1}no copia todo; {show fl2}cada página se copia cuando alguien escribe.",
+   "{show fnext}Mañana: qué hace exec."
+  ],
+  "lineas": ["<b>fork</b> comparte las páginas al principio", "<b>copy-on-write</b>: se copia al escribir"],
+  "mañana": "qué hace exec"
+ },
+ "lexico": {"copy-on-write": "copi~on~ráit", "exec": "exec"}
+}

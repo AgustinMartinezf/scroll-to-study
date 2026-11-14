@@ -1,0 +1,61 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "chip", "id": "mil", "text": "1000 suspect commits", "kind": "warn", "icon": "warning"},
+    {"type": "chip", "id": "bis", "text": "git bisect", "kind": "blue", "mono": true, "icon": "magnifying-glass"}
+   ],
+   "frases": [
+    "A bug showed up in one of the last {show mil}thousand commits.",
+    "Are you going to test them one by [-one]?",
+    "No need: {show bis}git bisect finds it with a [+binary] search."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "console", "id": "c", "title": "terminal", "lines": ["$ git bisect start", "$ git bisect bad", "$ git bisect good v1.0"]}
+   ],
+   "frases": [
+    "{show c}First you start, {type c}mark the current commit as bad and an old one as good.",
+    "Now Git knows between which two points to [+search]."
+   ]
+  },
+  {
+   "fuentes": ["A3"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "list", "id": "p", "title": "each round", "items": [["p1", "Git jumps to the <b>middle</b> commit"], ["p2", "You test it: <b>good</b> or <em>bad</em>"], ["p3", "<b>Half</b> is ruled out"]]}
+   ],
+   "frases": [
+    "Git puts you on the {show p1}middle commit, and {good p1}you test it.",
+    "You mark it {show p2}good or bad based on the {good p2}result.",
+    "So {show p3}half of what is left is {good p3}[+ruled] out."
+   ]
+  },
+  {
+   "fuentes": ["A4", "A5"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "counter", "id": "n", "value": "10", "label": "tests for 1000 commits", "kind": "good"},
+    {"type": "chip", "id": "rs", "text": "git bisect reset", "kind": "neutral", "mono": true}
+   ],
+   "frases": [
+    "Since each test cuts the rest in half, a thousand commits take about {show n}{boom n +0.4}[+ten] tests.",
+    "At the end, {show rs}git bisect reset takes you back to where you were."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "If they ask you, [+say]: git bisect {show fl1}splits the history in half {show fl2}until it finds the guilty commit.",
+   "{show fnext}Tomorrow: how git rebase works."
+  ],
+  "lineas": ["<b>git bisect</b>: binary search in the history", "1000 commits → about <b>10</b> tests"],
+  "mañana": "how git rebase works"
+ },
+ "lexico": {}
+}

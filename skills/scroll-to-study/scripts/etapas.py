@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,14 +16,14 @@ MODOS = {
 
 # Textos del video y del pedido según el idioma del video (las reglas de arriba no cambian)
 IDIOMAS = {
-    "es": {"voz": "davefx", "ritmo": 6.15, "lexico": "lexico.json", "ejemplo": "ejemplo_guion.json",
+    "es": {"voz": "davefx", "ritmo": 6.15, "lexico": "lexico.json",
            "manana": "Mañana", "general": "método general · no está en tu material",
            "proyecto": {"pregunta": "Pregunta que te pueden hacer", "cierre": "Si te lo preguntan, decí:",
                         "titulo_final": "PARA EXPLICARLO", "decilo": "Decilo así"},
            "materia": {"pregunta": "Pregunta de examen", "cierre": "Para el examen, acordate:",
                        "titulo_final": "PARA EL EXAMEN", "decilo": "Acordate de esto"},
            "general_pedido": "método general, NO está en el material"},
-    "en": {"voz": "hfc_male", "ritmo": 4.91, "lexico": "lexico_en.json", "ejemplo": "example_script_en.json",
+    "en": {"voz": "hfc_male", "ritmo": 4.91, "lexico": "lexico_en.json",
            "manana": "Tomorrow", "general": "general method · not in your material",
            "proyecto": {"pregunta": "A question they may ask you", "cierre": "If they ask you, say:",
                         "titulo_final": "TO EXPLAIN IT", "decilo": "Say it like this"},
@@ -39,6 +40,12 @@ FORMATOS = {
     "pasos": "paso a paso: pasos que aparecen y se tildan en orden",
     "historia": "historia o caso: problema, intento, por qué falló, solución",
 }
+
+
+def ejemplo_guion(formato: str, idioma: str) -> str:
+    """El guion de ejemplo de ese formato e idioma, relativo a la carpeta del skill. Cada formato tiene uno
+    de otra materia, para que los videos no salgan todos con la misma forma (ni con la de Bases de Datos)."""
+    return f"prompts/ejemplos/{formato}.{idioma}.json"
 
 
 def elegir_formato(tema: dict[str, Any], afirm: list[dict[str, Any]], modo: str) -> str:
@@ -122,19 +129,174 @@ def _lista_afirmaciones(afirm: list[dict[str, Any]], idioma: str) -> str:
 
 
 def pedido_guion(inv: dict[str, Any], temas: list[dict[str, Any]], tema_id: str, modo: str = "proyecto",
-                 idioma: str = "es") -> str:
-    """El pedido de un guion: el tema y SOLO sus afirmaciones verificadas."""
+                 idioma: str = "es", validados: dict[str, tuple[str, list[list[str]]]] | None = None) -> str:
+    """El pedido de un guion: el tema y SOLO sus afirmaciones verificadas. validados (de guiones_validados)
+    agrega qué formato y qué elementos usaron los videos anteriores de la lista, para no repetirlos."""
     idx = next(i for i, t in enumerate(temas) if t["id"] == tema_id)
     tema = temas[idx]
     afirm = _afirmaciones_del_tema(inv, tema)
     manana = temas[idx + 1]["titulo"] if idx + 1 < len(temas) else "repaso general"
-    i = IDIOMAS[idioma]; m = i[modo]
+    m = IDIOMAS[idioma][modo]
     formato = elegir_formato(tema, afirm, modo)
-    return (f"IDIOMA DEL VIDEO: {idioma} (ejemplo: prompts/{i['ejemplo']})\n"
+    return (f"IDIOMA DEL VIDEO: {idioma}\n"
             f"FORMATO: {formato} ({FORMATOS[formato]})\n"
+            f"EJEMPLO: {ejemplo_guion(formato, idioma)} (el ejemplo es de otro tema: copiá su forma, no sus "
+            "elementos; elegí los elementos que mejor muestren TU contenido)\n"
             f"Tema: {tema['titulo']}\n{m['pregunta']}: {tema['pregunta']}\n"
             f"Tema de mañana: {manana}\nCIERRE: {m['cierre']}\n\nAfirmaciones disponibles:\n"
-            + _lista_afirmaciones(afirm, idioma))
+            + _lista_afirmaciones(afirm, idioma) + _videos_anteriores(temas[:idx], validados or {}))
+
+
+def _videos_anteriores(antes: list[dict[str, Any]], validados: dict[str, tuple[str, list[list[str]]]]) -> str:
+    lineas = [f"- {t['id']} {validados[t['id']][0]}: {resumen_escenas(validados[t['id']][1])}"
+              for t in antes if t["id"] in validados]
+    if not lineas:
+        return ""
+    return ("\n\nEarlier videos in this playlist (format: element types per block, | between blocks):\n"
+            + "\n".join(lineas) + "\n" + REGLA_VARIEDAD)
+
+
+# ---------------------------------------------------------------------------
+# validar un guion (lo que hace s2s.py guion, sin tocar archivos)
+# ---------------------------------------------------------------------------
+
+AQUI = Path(__file__).resolve().parent
+
+
+def validar_guion(guion: dict[str, Any], inv: dict[str, Any], idioma: str = "es",
+                  modo: str = "proyecto") -> tuple[dict[str, Any], list[str], list[str]]:
+    """Compila el guion como s2s.py guion: léxico del idioma más el del guion, textos del cierre según el
+    modo, íconos permitidos y fuentes contra el inventario. Devuelve (spec, errores, avisos)."""
+    from compile import compilar
+    i = IDIOMAS[idioma]; tx = {**i, **i[modo]}
+    lex = {k.lower(): v for k, v in leer(AQUI / tx["lexico"]).items()}
+    lex.update({k.lower(): v for k, v in guion.get("lexico", {}).items()})
+    guion["idioma"] = idioma
+    if isinstance(guion.get("final"), dict):
+        guion["final"].setdefault("titulo", tx["titulo_final"])
+        guion["final"].setdefault("decilo", tx["decilo"])
+        # titulo, decilo y etiqueta_manana se pueden pisar desde el guion (la guía del README lo hace)
+        guion["final"].setdefault("etiqueta_manana", f"{tx['manana']}: {guion['final'].get('mañana', '')}")
+    spec, rep = compilar(guion, lex, AQUI / "iconos", inv, ritmo=tx["ritmo"])
+    return spec, rep.errores, rep.avisos
+
+
+# La herramienta nació para un obligatorio de Bases de Datos: un ícono de base de datos en un video de
+# otra materia (los pares de claves de DNSSEC en una «tabla» con un cilindro) confunde más de lo que ayuda.
+ICONOS_BD = ("database", "table")
+TEMA_BD = re.compile(r"\b(tablas?|tables?|sql|bases? de datos|databases?|columnas?|columns?|consultas?|"
+                     r"quer(?:y|ies)|fks?|pks?|claves? primarias?|claves? for[aá]neas?)\b", re.IGNORECASE)
+
+
+def iconos_de(e: Any) -> list[str]:
+    """Todos los íconos que pide un elemento: su «icon» y los de lo que lleva adentro (cajas de un flow,
+    chips de un row, renglones de una list, que lo llevan en la tercera posición)."""
+    if isinstance(e, list):
+        return [i for x in e for i in iconos_de(x)]
+    if not isinstance(e, dict):
+        return []
+    out = [e["icon"]] if isinstance(e.get("icon"), str) else []
+    for k, v in e.items():
+        if k == "items" and e.get("type") == "list" and isinstance(v, list):
+            out += [it[2] for it in v if isinstance(it, list) and len(it) > 2 and isinstance(it[2], str)]
+        elif isinstance(v, (dict, list)):
+            out += iconos_de(v)
+    return out
+
+
+def avisos_iconos(guion: dict[str, Any], afirm: list[dict[str, Any]]) -> list[str]:
+    """AVISO por cada ícono database o table si ninguna afirmación del tema habla de bases de datos."""
+    if any(TEMA_BD.search(f"{a.get('texto', '')} {a.get('cita', '')}") for a in afirm):
+        return []
+    avisos = []
+    for b, bloque in enumerate(guion.get("bloques", [])):
+        for e in bloque.get("elementos", []):
+            for ic in dict.fromkeys(iconos_de(e)):
+                if ic in ICONOS_BD:
+                    avisos.append(f"bloque {b} ({e.get('type')} {e.get('id')}): el ícono {ic} no tiene que ver "
+                                  "con este tema; sacalo o elegí otro")
+    return avisos
+
+
+# ---------------------------------------------------------------------------
+# variedad: cada guion sabe qué usaron los videos anteriores de la lista
+# ---------------------------------------------------------------------------
+
+# acciones que cambian cómo se ve una escena (un paquete que viaja, un chip que se da vuelta, algo tachado):
+# entran en el resumen junto a los tipos de elemento, como «flow+send»
+ACCIONES_DE_ESCENA = ("send", "swap", "strike")
+REGLA_VARIEDAD = ("Do not open with the same element as the previous video, and do not repeat the exact "
+                  "combination of element types of any earlier video.")
+
+
+def escenas(guion: dict[str, Any]) -> list[list[str]]:
+    """Por bloque, los tipos de elemento en orden (sin repetir) y después las acciones de escena que usa."""
+    out = []
+    for bloque in guion.get("bloques", []):
+        tipos: list[str] = []
+        for e in bloque.get("elementos", []):
+            t = e.get("type") if isinstance(e, dict) else None
+            if isinstance(t, str) and t not in tipos:
+                tipos.append(t)
+        for f in bloque.get("frases", []):
+            for acc in re.findall(r"\{\s*([a-z]+)", f if isinstance(f, str) else ""):
+                if acc in ACCIONES_DE_ESCENA and acc not in tipos:
+                    tipos.append(acc)
+        out.append(tipos)
+    return out
+
+
+def resumen_escenas(esc: list[list[str]]) -> str:
+    """«chat | flow+send | big»: un bloque por tramo."""
+    return " | ".join("+".join(b) for b in esc)
+
+
+def guion_validado(carpeta: Path) -> dict[str, Any] | None:
+    """El guion.json de T/tNN si s2s.py guion lo validó sin errores y no cambió después (la huella del
+    reporte coincide; los reportes de antes de guardar la huella valen si hay spec.json)."""
+    carpeta = Path(carpeta)
+    guion, reporte = carpeta / "guion.json", carpeta / "reporte.json"
+    if not guion.exists() or not reporte.exists() or not (carpeta / "spec.json").exists():
+        return None
+    try:
+        rep, datos = leer(reporte), leer(guion)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(rep, dict) or rep.get("errores") or not isinstance(datos, dict):
+        return None
+    if "huella" in rep and rep["huella"] != huella(guion):
+        return None
+    return datos
+
+
+def guiones_validados(t: Path, temas: list[dict[str, Any]], inv: dict[str, Any],
+                      modo: str) -> dict[str, tuple[str, list[list[str]]]]:
+    """{tema: (formato, escenas)} de los temas con guion validado, en el orden de la lista."""
+    out = {}
+    for tema in temas:
+        g = guion_validado(Path(t) / tema["id"])
+        if g is not None:
+            out[tema["id"]] = (elegir_formato(tema, _afirmaciones_del_tema(inv, tema), modo), escenas(g))
+    return out
+
+
+def avisos_variedad(tema_id: str, esc: list[list[str]], temas: list[dict[str, Any]],
+                    validados: dict[str, tuple[str, list[list[str]]]]) -> list[str]:
+    """AVISO si el video abre con el mismo tipo de elemento que el anterior de la lista (el último tema
+    antes de este con guion validado), o si repite la combinación exacta de otro video de la lista."""
+    orden = [t["id"] for t in temas]
+    otros = {i: v for i, v in validados.items() if i != tema_id}
+    avisos = []
+    antes = orden[:orden.index(tema_id)] if tema_id in orden else []
+    anterior = next((i for i in reversed(antes) if i in otros), None)
+    if anterior and esc and esc[0] and otros[anterior][1] and otros[anterior][1][0][:1] == esc[0][:1]:
+        avisos.append(f"variedad: abre con {esc[0][0]}, igual que el video anterior ({anterior}); "
+                      "empezá con otro elemento")
+    for i, (formato, e) in otros.items():
+        if e == esc:
+            avisos.append(f"variedad: repite la combinación de elementos de {i} ({resumen_escenas(e)}); "
+                          "cambiá los elementos de algún bloque")
+    return avisos
 
 
 # ---------------------------------------------------------------------------

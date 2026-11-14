@@ -288,7 +288,6 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
         rep.error(donde, f"kind «{e['kind']}» no existe ({sorted(KINDS)})")
 
     if tipo == "table":
-        iconos.add(e.get("icon", "database"))
         filas = []
         for i, r in enumerate(e.get("rows", [])):
             r = {"cells": r} if isinstance(r, list) else r
@@ -335,7 +334,6 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
                 rep.error(donde, f"la línea {i} de la consola tiene {len(_texto_plano(linea))} caracteres "
                                  f"(máximo {CONSOLA_MAX}); partila en dos líneas o acortala")
     elif tipo == "list":
-        iconos.add(e.get("icon", "list-checks"))
         for it in e["items"]:
             nuevo_id(it[0])
             ids.con_tachado.add(it[0])
@@ -367,7 +365,6 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
             rep.error(donde, f"kind «{e['kind']}» no existe")
         ids.con_tachado.add(e["id"])
     elif tipo == "chart":
-        iconos.add(e.get("icon", "chart-bar"))
         barras = e["bars"]
         if not 2 <= len(barras) <= 5:
             rep.error(donde, "un chart lleva entre 2 y 5 barras")

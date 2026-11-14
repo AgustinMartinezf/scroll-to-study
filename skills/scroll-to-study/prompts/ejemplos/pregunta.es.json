@@ -1,0 +1,54 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "flow", "id": "net", "items": [{"id": "c0", "text": "cliente", "icon": "users"}, {"id": "s0", "text": "servidor"}]},
+    {"type": "chip", "id": "q", "text": "¿Por qué no alcanzan dos?", "kind": "warn", "icon": "question"},
+    {"type": "countdown", "id": "cd", "seconds": 3}
+   ],
+   "frases": [
+    "Antes de mandar un solo dato, {show net}TCP intercambia [+tres] mensajes.",
+    "Cliente y servidor tienen que ponerse de acuerdo en algo.",
+    "Pensalo: ¿por qué no alcanzan {show q}solo dos {show cd}mensajes?"
+   ]
+  },
+  {
+   "fuentes": ["A2", "A3"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "chip", "id": "isn", "text": "cada lado elige su número de secuencia", "kind": "blue"},
+    {"type": "flow", "id": "hs", "items": [{"id": "c1", "text": "cliente", "icon": "users"}, {"id": "s1", "text": "servidor"}]}
+   ],
+   "frases": [
+    "La clave es el {show isn}[+número] de secuencia: cada lado elige el suyo.",
+    "El cliente {show hs}manda un {send hs de=c1 a=s1 texto=SYN}SYN con su número inicial.",
+    "El servidor contesta {send hs de=s1 a=c1 texto=SYN-ACK}con un SYN-ACK: confirma ese número y manda el suyo."
+   ]
+  },
+  {
+   "fuentes": ["A4", "A5"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "flow", "id": "f3", "items": [{"id": "c2", "text": "cliente", "icon": "users"}, {"id": "s2", "text": "servidor"}]},
+    {"type": "chip", "id": "dos", "text": "¿llegó el número del servidor?", "kind": "bad", "icon": "warning"},
+    {"type": "big", "id": "b", "text": "2 números confirmados"}
+   ],
+   "frases": [
+    "Falta el tercero: el cliente {show f3}manda un {send f3 de=c2 a=s2 texto=ACK}ACK y confirma el número del servidor.",
+    "Con solo dos, el servidor no sabría si su número {show dos}[-llegó].",
+    "Con tres, {show b}{boom b +0.3}los dos números quedan [+confirmados]."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "Para el examen, [+acordate]: {show fl1}SYN, SYN-ACK y ACK, y {show fl2}cada lado confirma el número del otro.",
+   "{show fnext}Mañana: la ventana de TCP."
+  ],
+  "lineas": ["<b>SYN → SYN-ACK → ACK</b>", "cada lado <b>confirma</b> el número del otro"],
+  "mañana": "la ventana de TCP"
+ },
+ "lexico": {"tcp": "te~ce~pe", "syn": "sin", "syn-ack": "sin~ac", "ack": "ac"}
+}

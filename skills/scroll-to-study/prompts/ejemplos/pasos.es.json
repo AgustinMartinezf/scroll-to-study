@@ -1,0 +1,61 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "chip", "id": "mil", "text": "1000 commits sospechosos", "kind": "warn", "icon": "warning"},
+    {"type": "chip", "id": "bis", "text": "git bisect", "kind": "blue", "mono": true, "icon": "magnifying-glass"}
+   ],
+   "frases": [
+    "Un bug apareció en alguno de los últimos {show mil}mil commits.",
+    "¿Los vas a probar uno por [-uno]?",
+    "No hace falta: {show bis}git bisect lo encuentra con una búsqueda [+binaria]."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "console", "id": "c", "title": "terminal", "lines": ["$ git bisect start", "$ git bisect bad", "$ git bisect good v1.0"]}
+   ],
+   "frases": [
+    "{show c}Primero arrancás, {type c}marcás el commit actual como malo y uno viejo como bueno.",
+    "Con eso, Git ya sabe entre qué dos puntos [+buscar]."
+   ]
+  },
+  {
+   "fuentes": ["A3"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "list", "id": "p", "title": "en cada vuelta", "items": [["p1", "Git salta al commit del <b>medio</b>"], ["p2", "Lo probás: <b>good</b> o <em>bad</em>"], ["p3", "Se descarta la <b>mitad</b>"]]}
+   ],
+   "frases": [
+    "Git te deja en el commit del {show p1}medio, y {good p1}lo probás.",
+    "Lo marcás {show p2}bueno o malo según el {good p2}resultado.",
+    "Así se descarta la {show p3}mitad de los que {good p3}[+quedan]."
+   ]
+  },
+  {
+   "fuentes": ["A4", "A5"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "counter", "id": "n", "value": "10", "label": "pruebas para 1000 commits", "kind": "good"},
+    {"type": "chip", "id": "rs", "text": "git bisect reset", "kind": "neutral", "mono": true}
+   ],
+   "frases": [
+    "Como cada prueba parte el resto a la mitad, mil commits se resuelven en unas {show n}{boom n +0.4}[+diez] pruebas.",
+    "Al final, {show rs}git bisect reset te devuelve a donde estabas."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "Si te lo preguntan, [+decí]: git bisect {show fl1}parte la historia a la mitad {show fl2}hasta dar con el commit culpable.",
+   "{show fnext}Mañana: cómo funciona git rebase."
+  ],
+  "lineas": ["<b>git bisect</b>: búsqueda binaria en la historia", "1000 commits → unas <b>10</b> pruebas"],
+  "mañana": "cómo funciona git rebase"
+ },
+ "lexico": {"git": "guit", "bisect": "baisect", "bug": "bag", "commit": "comit", "commits": "comits", "reset": "riset", "rebase": "ribéis"}
+}

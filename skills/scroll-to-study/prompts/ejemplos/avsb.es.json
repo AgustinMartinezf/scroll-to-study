@@ -1,0 +1,54 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "row", "id": "lados", "items": [{"id": "p", "text": "permutación", "kind": "blue"}, {"id": "c", "text": "combinación", "kind": "purple"}]},
+    {"type": "chip", "id": "ab", "text": "AB ≠ BA", "kind": "blue", "mono": true, "alt": "AB = BA", "altkind": "purple"}
+   ],
+   "frases": [
+    "Elegir dos de tres letras: ¿hay seis maneras o solo [+tres]?",
+    "Depende de una sola pregunta: {show lados}¿importa el orden?",
+    "En una {show p}permutación sí: {show ab}AB y BA son [+distintas].",
+    "En una {show c}combinación no: {swap ab}son la misma."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "formula", "id": "fp", "tex": "P(n,r)=\\frac{n!}{(n-r)!}", "label": "permutaciones"},
+    {"type": "chip", "id": "ep", "text": "P(3,2) = 6: AB BA AC CA BC CB", "kind": "blue", "mono": true}
+   ],
+   "frases": [
+    "Para contar permutaciones: {show fp}ene factorial sobre ene menos erre, factorial.",
+    "Con tres letras tomadas de a dos, salen {show ep}[+seis]."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "formula", "id": "fc", "tex": "C(n,r)=\\frac{n!}{r!\\,(n-r)!}", "label": "combinaciones"},
+    {"type": "chip", "id": "ec", "text": "C(3,2) = 3: AB AC BC", "kind": "purple", "mono": true},
+    {"type": "big", "id": "b", "text": "C = P ÷ r!"}
+   ],
+   "frases": [
+    "En la permutación, cada par aparecía [-dos] veces.",
+    "Para combinaciones, además {show fc}dividís por erre factorial.",
+    "Así cada grupo cuenta una sola vez: salen {show ec}[+tres].",
+    "Toda la diferencia es esa: {show b}{boom b +0.3}dividir por erre factorial."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "Para el examen, [+acordate]: si {show fl1}importa el orden, permutación; si {show fl2}no importa, combinación.",
+   "{show fnext}Mañana: combinaciones con repetición."
+  ],
+  "lineas": ["<b>importa el orden</b> → permutación", "<b>no importa</b> → combinación: dividí por r!"],
+  "mañana": "combinaciones con repetición"
+ },
+ "lexico": {"ab": "a~be", "ba": "be~a"}
+}

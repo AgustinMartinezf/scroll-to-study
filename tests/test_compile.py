@@ -51,14 +51,10 @@ def test_ancla_segunda_aparicion():
     assert ["0:no#2", "bad", "m-r1"] in spec["EVENTS"]
 
 
-def test_el_prompt_apunta_a_los_dos_ejemplos_y_ambos_compilan():
+def test_el_prompt_apunta_a_los_ejemplos_por_formato():
+    # que los 10 ejemplos compilan lo comprueba test_variedad.py, con el mismo validador que s2s.py guion
     p = (SKILL / "prompts" / "guion.md").read_text(encoding="utf-8")
-    assert "prompts/ejemplo_guion.json" in p and "prompts/example_script_en.json" in p
-    en = json.loads((SKILL / "prompts" / "example_script_en.json").read_text(encoding="utf-8"))
-    lex_en = json.loads((SKILL / "scripts" / "lexico_en.json").read_text(encoding="utf-8"))
-    for g, lex in ((EJEMPLO, LEX), (en, lex_en)):
-        spec, rep = compilar(copy.deepcopy(g), lex, SKILL / "scripts" / "iconos")
-        assert rep.errores == [] and any(e[1] == "boom" for e in spec["EVENTS"])
+    assert "prompts/ejemplos/<formato>.<idioma>.json" in p
 
 
 @pytest.mark.parametrize("elemento, esperado", [

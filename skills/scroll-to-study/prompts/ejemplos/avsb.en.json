@@ -1,0 +1,54 @@
+{
+ "bloques": [
+  {
+   "fuentes": ["A1"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "row", "id": "lados", "items": [{"id": "p", "text": "permutation", "kind": "blue"}, {"id": "c", "text": "combination", "kind": "purple"}]},
+    {"type": "chip", "id": "ab", "text": "AB ≠ BA", "kind": "blue", "mono": true, "alt": "AB = BA", "altkind": "purple"}
+   ],
+   "frases": [
+    "Pick two of three letters: are there six ways, or only [+three]?",
+    "It comes down to one question: {show lados}does order matter?",
+    "In a {show p}permutation, yes: {show ab}AB and BA are [+different].",
+    "In a {show c}combination, no: {swap ab}they are the same."
+   ]
+  },
+  {
+   "fuentes": ["A2"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "formula", "id": "fp", "tex": "P(n,r)=\\frac{n!}{(n-r)!}", "label": "permutations"},
+    {"type": "chip", "id": "ep", "text": "P(3,2) = 6: AB BA AC CA BC CB", "kind": "blue", "mono": true}
+   ],
+   "frases": [
+    "To count permutations: {show fp}n factorial over n minus r, factorial.",
+    "With three letters taken two at a time, you get {show ep}[+six]."
+   ]
+  },
+  {
+   "fuentes": ["A3", "A4"],
+   "comprobar": [],
+   "elementos": [
+    {"type": "formula", "id": "fc", "tex": "C(n,r)=\\frac{n!}{r!\\,(n-r)!}", "label": "combinations"},
+    {"type": "chip", "id": "ec", "text": "C(3,2) = 3: AB AC BC", "kind": "purple", "mono": true},
+    {"type": "big", "id": "b", "text": "C = P ÷ r!"}
+   ],
+   "frases": [
+    "In the permutations, each pair showed up [-twice].",
+    "For combinations, you also {show fc}divide by r factorial.",
+    "So each group counts only once: you get {show ec}[+three].",
+    "That is the whole difference: {show b}{boom b +0.3}dividing by r factorial."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "For the exam, [+remember]: if {show fl1}order matters, permutation; if {show fl2}it does not, combination.",
+   "{show fnext}Tomorrow: combinations with repetition."
+  ],
+  "lineas": ["<b>order matters</b> → permutation", "<b>order does not matter</b> → combination: divide by r!"],
+  "mañana": "combinations with repetition"
+ },
+ "lexico": {"ab": "A~B", "ba": "B~A"}
+}

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
+### Changed
+
+- Videos of any subject no longer look like a database course. A table without an icon used to get the
+  database icon (a DNSSEC video showed its KSK/ZSK key pairs as a database table); now a table, list,
+  chart or Venn diagram without an icon shows its title alone. A console's default title is "terminal"
+  instead of "mysql>".
+- There is one example script per format, each from a different subject: a question about a network
+  protocol, a myth about operating systems, a math comparison with formulas, programming steps with a
+  console and a list, and the library project as a story. `s2s.py pedido` names the example for the
+  topic's format and says to copy its shape, not its elements. The examples moved to
+  `prompts/ejemplos/<format>.<language>.json`.
+- `prompts/guion.md` suggests scenes by the shape of the content (an exchange, a hierarchy, a
+  comparison, steps, a number, a formula, a mistake, a definition) and leaves the table for data that
+  really has rows and columns. `prompts/preguntas.md` has a second example, from networks.
+
+### Added
+
+- Videos in a playlist vary. `s2s.py pedido` lists the format and element types of the earlier videos
+  with a validated script, and `s2s.py guion` warns when a script opens with the same element as the
+  previous video or repeats the exact combination of another one. Each validated script's element
+  types are recorded in `registro.jsonl`.
+- `s2s.py guion` warns when a script uses the database or table icon in a topic whose statements do not
+  mention databases; the skill treats that warning as an error.
+
 ## [0.4.2] - 2026-11-14
 
 ### Fixed
@@ -139,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.3.0...v0.4.0

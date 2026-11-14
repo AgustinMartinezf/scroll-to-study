@@ -133,12 +133,20 @@ For each topic, in order:
 
 1. `S2S pedido -t T --tema t01`. **That output is the only thing you may use as content**: even if
    you read the whole material, do not add names, numbers, reasons or examples that are not there.
-   It also says the video language, the format and the closing line.
+   It also says the video language, the format, the closing line and the EXAMPLE script for that
+   format: it is about another subject, so copy its shape, not its elements. From the second topic
+   on, it also lists "Earlier videos in this playlist": the format and element types of each earlier
+   topic with a validated script. Read it before choosing elements: do not open with the same element
+   as the previous video, and do not repeat the exact combination of any earlier one. Pick the
+   elements by the shape of this topic's content, not by what worked before.
 2. Write the script following `prompts/guion.md` to `T/t01/guion.json`, in the video language. If a
    word will be mispronounced (snake_case, acronyms, words without accents in code), add it to
    `"lexico"`.
 3. `S2S guion -t T --tema t01`. Fix everything marked `ARREGLAR` and run it again. Also treat as
-   errors the `AVISO` lines about identifiers or numbers that are not in the sources.
+   errors the `AVISO` lines about identifiers or numbers that are not in the sources, and the ones
+   that say an icon has nothing to do with the topic ("el ícono database no tiene que ver con este
+   tema"): remove that icon or pick one that names what the element is about. The `AVISO` lines that
+   start with "variedad" are not errors, but fix them if a different element shows the content as well.
    You do not fix `PREGUNTAR`: note it for the person.
    If the script says not to continue, move on to the next topic and tell them at the end.
 4. Once the script is valid, the practice questions for that topic: `S2S preguntas -t T --tema t01`.
@@ -211,5 +219,6 @@ video, about a minute and a quarter), so with many videos run it in the backgrou
 ## What you do not do
 - Do not write spec.json, script.json, gaps.json or timing.json by hand: the scripts generate them.
 - Do not change sizes, pauses or pronunciation in the script outside `"lexico"`: the compiler computes them.
-- Do not use icons outside the list in `prompts/guion.md` (the validator rejects them).
+- Do not use icons outside the list in `prompts/guion.md` (the validator rejects them). Icons are
+  optional; never use database or table unless the topic is about databases.
 - Do not upload the material or the videos anywhere: everything stays on the person's computer.
