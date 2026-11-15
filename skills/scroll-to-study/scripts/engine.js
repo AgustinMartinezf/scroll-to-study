@@ -131,6 +131,11 @@ function colorear(el, t, fondo, tinta, linea) {   // hl, good, bad y ruta sobre 
   tl.fromTo(el, { scale: 1 }, { scale: 1.08, transformOrigin: "50% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
 }
 const aparecido = new Set();
+// una línea de código se resalta con una banda translúcida: el resaltado de sintaxis se sigue leyendo
+function banda(el, t, color) {
+  tl.to(el, { backgroundColor: color, duration: 0.25 }, t);
+  tl.fromTo(el, { scale: 1 }, { scale: 1.03, transformOrigin: "0% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
+}   // nodos que una ruta ya hizo aparecer
 // apariciones compuestas
 function rodar(el, t) {
   el.querySelectorAll(".dg").forEach((d, i) => tl.fromTo(d.querySelector(".dcol"), { yPercent: 0 },
@@ -245,7 +250,7 @@ S.EV.forEach(e => {
         talk(cid, t + 0.2, x.until !== undefined ? x.until : endOfPhrase(t));
         if (!shownChars[cid]) { shownChars[cid] = 1; alive(cid, t + 0.6, D); }
       }
-      else if (cls.contains("li") || cls.contains("capa") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
+      else if (cls.contains("li") || cls.contains("capa") || cls.contains("cl") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
       else if (cls.contains("arrow")) {
         tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.1 }, t);
         tl.fromTo(q(id + "-p"), { scaleY: 0, transformOrigin: "50% 0%" }, { scaleY: 1, duration: 0.35, ease: "power2.out" }, t);
@@ -276,10 +281,12 @@ S.EV.forEach(e => {
     case "hide": tl.to(q(id), { opacity: 0, scale: 0.6, duration: 0.25, ease: "power3.in" }, t); break;
     case "hl": if (isReg(id)) { region(id, t, C.regionHl, 0.75); break; }
       if (esDiagrama(el)) { colorear(el, t, C.hl, C.hlInk, C.ruta); break; }
+      if (cls.contains("cl")) { banda(el, t, C.codBanda); break; }
       tl.to(q(id), { backgroundColor: x.bg || C.hl, color: x.color || C.hlInk, duration: 0.25 }, t);
       tl.fromTo(q(id), { scale: 1 }, { scale: 1.08, duration: 0.15, yoyo: true, repeat: 1 }, t); break;
     case "good":
-      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaBien : C.good, el.classList.contains("dmsg") ? C.celdaBien : C.goodInk, C.celdaBien);
+      if (cls.contains("cl")) banda(el, t, C.codBien);
+      else if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaBien : C.good, el.classList.contains("dmsg") ? C.celdaBien : C.goodInk, C.celdaBien);
       else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaBien, duration: 0.25 }, t); tl.fromTo(q(id + "-ok"), { opacity: 0, scale: 2, rotation: -30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaBien, backgroundColor: C.filaBien, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.celdaBien, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaBien, duration: 0.25 }, t); }
@@ -287,7 +294,8 @@ S.EV.forEach(e => {
       else tl.to(q(id), { backgroundColor: C.good, color: C.goodInk, duration: 0.25 }, t);
       break;
     case "bad":
-      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaMal : C.bad, el.classList.contains("dmsg") ? C.celdaMal : C.badInk, C.celdaMal);
+      if (cls.contains("cl")) banda(el, t, C.codMal);
+      else if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaMal : C.bad, el.classList.contains("dmsg") ? C.celdaMal : C.badInk, C.celdaMal);
       else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaMal, duration: 0.25 }, t); tl.to(q(id + "-ok"), { opacity: 0, duration: 0.1 }, t); tl.fromTo(q(id + "-no"), { opacity: 0, scale: 2, rotation: 30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaMal, backgroundColor: C.filaMal, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.bad, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaMal, duration: 0.25 }, t); }

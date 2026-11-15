@@ -293,7 +293,8 @@ def cmd_guion(a: argparse.Namespace) -> int:
     try:
         guion = leer(carpeta / "guion.json")
         inv = leer(t / "inventario.json")
-        spec, errores, avisos = validar_guion(guion, inv, idioma_de(t), modo_de(t))
+        corpus = (t / "corpus.txt").read_text(encoding="utf-8") if (t / "corpus.txt").exists() else None
+        spec, errores, avisos = validar_guion(guion, inv, idioma_de(t), modo_de(t), corpus)
         tema = _tema(t, a.tema)
         avisos += avisos_iconos(guion, [x for x in inv["afirmaciones"] if x["id"] in tema.get("afirmaciones", [])])
         esc = escenas(guion)

@@ -8,12 +8,14 @@
         "dTinta": "#121a15", "dLinea": "#121a15", "dVida": "#b8c4bd", "dParte": "#1f6b45", "dParteInk": "#ffffff",
         "dFondo": "#ffffff", "dNodo": "#ffffff", "dBorde": "#121a15", "dArista": "#6b7a70", "dCorte": "#e5483b",
         "dBien": "#13824a", "dMal": "#c2372b", "dAviso": "#b07d00",
-        "capa": "#eef2ef", "capaInk": "#121a15", "capaBorde": "#121a15"},
+        "capa": "#eef2ef", "capaInk": "#121a15", "capaBorde": "#121a15",
+        "codFondo": "#121a15", "codTinta": "#e6ece7", "codNum": "#6b7a70", "codClave": "#ff9e64", "codTexto": "#9ece6a", "codComentario": "#8a978f", "codNumero": "#e0af68"},
  "c": {"good": "#1fbf6a", "goodInk": "#04170b", "bad": "#e5483b", "badInk": "#ffffff", "hl": "#ffe7a3", "hlInk": "#2a2000",
        "filaBien": "#d9f5e5", "filaMal": "#fde3df", "celdaBien": "#13824a", "celdaMal": "#c2372b", "regionHl": "#ffcf3f",
        "subApagado": "rgba(244,247,245,.35)", "subPrendido": "#ffffff", "subClave": "#1fbf6a", "subClaveInk": "#04170b",
        "subMal": "#e5483b", "subMalInk": "#ffffff",
        "ruta": "#f0a500", "rutaInk": "#2a2000",
-       "ficha": "#ffcf3f", "fichaInk": "#2a2000"},
+       "ficha": "#ffcf3f", "fichaInk": "#2a2000",
+       "codBanda": "rgba(255,207,63,.3)", "codBien": "rgba(31,191,106,.4)", "codMal": "rgba(229,72,59,.45)"},
  "css": ""
 }

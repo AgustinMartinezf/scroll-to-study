@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sintaxis import LENGUAJES
+
 # ---------------------------------------------------------------------------
 # Constantes que tienen que coincidir con engine.py / engine.js
 # ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ TIPOS: dict[str, tuple[set[str], set[str]]] = {
     "secuencia": ({"id", "partes", "mensajes"}, {"title"}),
     "arbol":   ({"id", "nodos"}, {"title"}),
     "capas":   ({"id", "capas"}, {"title"}),
+    "codigo":  ({"id", "lenguaje", "lineas"}, {"title", "ejemplo"}),
 }
 COMUNES = {"type", "gap", "align"}
 LAYOUT_DEL_COMPILADOR = {"fs", "w", "col", "fila", "pos", "caja_h", "alto"}   # si el LLM los pone, se ignoran
@@ -92,6 +95,9 @@ CAPAS_TEXTO_MAX = 22
 CAPAS_DETALLE_MAX = 26
 CAPAS_CARRIL = 160            # a la derecha de las barras, por donde viaja la ficha de atravesar
 CAPAS_K_DETALLE = 0.72        # el detalle va más chico que el nombre de la capa
+CODIGO_LINEAS = (1, 12)
+CODIGO_MAX = 34               # caracteres por línea (como la consola: letra fija en 960 px)
+CODIGO_NUMEROS = 72           # la columna de los números de línea
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +482,17 @@ def fs_capas(capas: list[dict[str, Any]]) -> int:
     return fs
 
 
+def fs_codigo(lineas: list[str]) -> int:
+    """La mayor letra fija (tope 40) con la que la línea más larga entra al lado de los números de línea."""
+    largo = max((len(l) for l in lineas), default=1)
+    return min(40, int((DIAG_ANCHO - CODIGO_NUMEROS - 24) / (0.6 * max(largo, 1))))
+
+
+def norm_codigo(linea: str) -> str:
+    """Como fuentes.py normaliza las citas (espacios juntos y minúsculas), sin la sangría."""
+    return re.sub(r"\s+", " ", linea).strip().lower()
+
+
 def validar_arbol(nodos: Any, donde: str, rep: Reporte) -> list[dict[str, Any]] | None:
     """Exactamente una raíz, padres que existen, sin ciclos, hasta ARBOL_NIVELES niveles y ARBOL_HIJOS hijos."""
     if not isinstance(nodos, list) or not ARBOL_NODOS[0] <= len(nodos) <= ARBOL_NODOS[1]:
@@ -526,7 +543,7 @@ def validar_arbol(nodos: Any, donde: str, rep: Reporte) -> list[dict[str, Any]] 
 
 
 def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
-                      iconos: set[str]) -> dict[str, Any] | None:
+                      iconos: set[str], corpus: str | None = None) -> dict[str, Any] | None:
     """Valida un elemento y devuelve la versión que espera engine.py (con fs calculado)."""
     tipo = e.get("type")
     if tipo not in TIPOS:
@@ -759,6 +776,30 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
             largo = max(limpias, key=lambda c: len(c["text"]) + len(c.get("detalle", "")))
             rep.error(donde, f"la capa «{largo['id']}» no entra ni con letra {FS_MIN}px: acortá su texto o su detalle")
             return None
+    elif tipo == "codigo":
+        if e["lenguaje"] not in LENGUAJES:
+            rep.error(donde, f"lenguaje «{e['lenguaje']}» desconocido (puede ser {', '.join(LENGUAJES)})")
+        lineas = e["lineas"]
+        if not isinstance(lineas, list) or not CODIGO_LINEAS[0] <= len(lineas) <= CODIGO_LINEAS[1] \
+                or not all(isinstance(l, str) for l in lineas):
+            rep.error(donde, f"un bloque de código lleva entre {CODIGO_LINEAS[0]} y {CODIGO_LINEAS[1]} líneas (textos); "
+                             "mostrá solo las que importan")
+            return None
+        if "ejemplo" in e and not isinstance(e["ejemplo"], bool):
+            rep.error(donde, "ejemplo va true o false")
+        for i, l in enumerate(lineas):
+            nuevo_id(f"{e['id']}-l{i}")
+            ids.con_tachado.add(f"{e['id']}-l{i}")
+            if len(l) > CODIGO_MAX:
+                rep.error(donde, f"la línea {i} tiene {len(l)} caracteres (máximo {CODIGO_MAX}): partila en dos "
+                                 "líneas, con la sangría que corresponda")
+            if "\t" in l:
+                rep.error(donde, f"la línea {i} tiene tabulaciones: usá espacios para la sangría")
+            # la verdad: el código que se muestra está copiado del material, salvo que sea un ejemplo
+            if corpus is not None and e.get("ejemplo") is not True and l.strip() and norm_codigo(l) not in corpus:
+                rep.error(donde, f"línea {i} «{l.strip()}»: esta línea no está en el material: copiala tal cual "
+                                 "o marcá el bloque como ejemplo (\"ejemplo\": true)")
+        out["fs"] = fs_codigo(lineas)
     elif tipo == "row":
         n = len(e["items"])
         maxw = (ANCHO_MAX - 24 * (n - 1)) / max(1, n)
@@ -784,7 +825,8 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
 # ---------------------------------------------------------------------------
 
 def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None = None,
-             inventario: dict[str, Any] | None = None, ritmo: float = RITMO) -> tuple[dict[str, Any], Reporte]:
+             inventario: dict[str, Any] | None = None, ritmo: float = RITMO,
+             corpus: str | None = None) -> tuple[dict[str, Any], Reporte]:
     """inventario: si se pasa, cada fuente tiene que ser una afirmación verificada (estado ok)
     y se avisa de identificadores o números que no aparecen en las fuentes del bloque."""
     rep = Reporte()
@@ -804,6 +846,8 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
         rep.aviso("guion", f"{len(bloques)} bloques; la estructura pide 3 o 4")
 
     ids = Ids()
+    # corpus: el texto del material (corpus.txt); el código que no es ejemplo tiene que estar ahí
+    corpus_norm = norm_codigo(corpus) if corpus is not None else None
     iconos: set[str] = {"check-circle", "x-circle", "seal-check", "calendar-check"}
     stations: list[list[dict[str, Any]]] = []
     ids_bloque: list[set[str]] = []
@@ -811,7 +855,7 @@ def compilar(guion: dict[str, Any], lex: dict[str, str], dir_iconos: Path | None
         antes = set(ids.todos)
         st = []
         for e in bloque.get("elementos", []):
-            el = preparar_elemento(e, f"bloque {b}", rep, ids, iconos)
+            el = preparar_elemento(e, f"bloque {b}", rep, ids, iconos, corpus_norm)
             if el:
                 st.append(el)
         if not st:
@@ -960,7 +1004,10 @@ def chequear_fuentes(b: int, bloque: dict[str, Any], afirm: dict[str, Any], rep:
     if not respaldo:
         return
     visible = " ".join(TOKEN.sub(lambda m: m.group(4) or " ", f) for f in bloque.get("frases", []))
-    visible += " " + json.dumps(bloque.get("elementos", []), ensure_ascii=False)
+    # el código copiado del material ya se comprobó línea por línea contra el corpus
+    elementos = [{k: v for k, v in e.items() if not (e.get("type") == "codigo" and k == "lineas" and e.get("ejemplo") is not True)}
+                 if isinstance(e, dict) else e for e in bloque.get("elementos", [])]
+    visible += " " + json.dumps(elementos, ensure_ascii=False)
     visible = re.sub(r'"(type|id|kind|icon|char|altkind|title|cols|rows|items|text|lines|label|alt|mono|labels|sets)"', " ", visible)
     visible = re.sub(r'"\d+":', " ", visible)          # códigos de región de un venn ("123": …)
     sueltos = sorted(i for i in identificadores(visible)
@@ -1000,7 +1047,7 @@ def chequear_orden(et: Etiqueta, ids: Ids, mostrados: set[str], donde: str, rep:
 def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
     requisitos = {
         "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo, big, "
-                                    "partes o mensajes de una secuencia, nodos de un árbol o capas"),
+                                    "partes o mensajes de una secuencia, nodos de un árbol, capas o líneas de código"),
         "swap": (ids.con_alt, "solo chips con «alt»"),
         "type": (ids.consolas, "solo consolas"),
         "point": (ids.dialogos, "solo diálogos"),

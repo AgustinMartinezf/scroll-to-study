@@ -7,6 +7,7 @@ composición de HyperFrames; reproductor.py la convierte en un video que se repr
 import json, re, os, sys, html as H
 from config import CFG
 import animacion
+import sintaxis
 
 # estilo visual: temas/<nombre>.json (+ .css). Segundo argumento o S2S_ESTILO; por defecto, cuaderno
 ESTILO = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("S2S_ESTILO", "cuaderno")
@@ -349,8 +350,10 @@ def el_arbol(e):
     svg = f'<svg class="dsvg" viewBox="0 0 {DIAG_ANCHO} {H_}" width="{DIAG_ANCHO}" height="{H_}">{aristas}{cajas}</svg>'
     return f'<div class="card diag arbol" id="{tid}">{head}<div class="dbox">{svg}</div></div>', 960, H_ + (110 if head else 40) + 30
 
-# ---------- capas ----------
+# ---------- capas y código ----------
 CAPAS_CARRIL = 160   # compile.CAPAS_CARRIL: el carril de la derecha, por donde viaja la ficha de atravesar
+CODIGO_NUMEROS = 72  # compile.CODIGO_NUMEROS
+TXT_EJEMPLO = {"es": "ejemplo", "en": "example"}
 
 def el_capas(e):
     """Barras apiladas del mismo ancho, de arriba hacia abajo: el nombre a la izquierda y el detalle a la
@@ -368,7 +371,23 @@ def el_capas(e):
     return (f'<div class="card capas" id="{e["id"]}">{head}<div class="cbox" style="width:{DIAG_ANCHO + 80}px;height:{alto + 40}px">'
             f'{barras}</div></div>'), 960, alto + 40 + (110 if head else 40)
 
-MAKERS = {"capas": el_capas, "secuencia": el_secuencia, "arbol": el_arbol, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
+def el_codigo(e):
+    """Un bloque de código con números de línea y resaltado de sintaxis (sintaxis.py) en los colores del tema."""
+    fs = e["fs"]; lh = round(fs * 1.45)
+    colores = {"kw": TP["codClave"], "str": TP["codTexto"], "com": TP["codComentario"], "num": TP["codNumero"]}
+    lineas = "".join(
+        f'<div class="cl" id="{e["id"]}-l{i}" style="height:{lh}px"><span class="cnum" style="width:{CODIGO_NUMEROS}px;'
+        f'color:{TP["codNum"]}">{i + 1}</span><span class="ctx">{sintaxis.a_html(l, e["lenguaje"], colores)}</span>{SK}</div>'
+        for i, l in enumerate(e["lineas"]))
+    tag = (f'<span class="ttag">{TXT_EJEMPLO.get(getattr(SPEC, "IDIOMA", "es"), "ejemplo")}</span>'
+           if e.get("ejemplo") else "")
+    titulo = e.get("title") or e["lenguaje"]
+    head = (f'<div class="chead" style="color:{TP["codTinta"]}">{icon("code", 48, TP["codTinta"])}<span>{H.escape(titulo)}</span>'
+            f'<span class="clen" style="color:{TP["codNum"]}">{H.escape(e["lenguaje"]) if e.get("title") else ""}</span>{tag}</div>')
+    return (f'<div class="card codigo" id="{e["id"]}" style="background:{TP["codFondo"]};color:{TP["codTinta"]}">{head}'
+            f'<div class="cbloque" style="font-size:{fs}px">{lineas}</div></div>'), 960, 110 + lh * len(e["lineas"]) + 34
+
+MAKERS = {"capas": el_capas, "codigo": el_codigo, "secuencia": el_secuencia, "arbol": el_arbol, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
           "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer,
           "counter": el_counter, "chart": el_chart, "chat": el_chat, "formula": el_formula, "venn": el_venn, "countdown": el_countdown}
 
@@ -413,6 +432,8 @@ def collect(e, si):
         for k in range(len(e["mensajes"])): owner[f'{e["id"]}-m{k}'] = si
     if e["type"] == "capas":
         for c in e["capas"]: owner[c["id"]] = si
+    if e["type"] == "codigo":
+        for i in range(len(e["lineas"])): owner[f'{e["id"]}-l{i}'] = si
     if e["type"] == "arbol":
         for n in e["nodos"]:
             owner[n["id"]] = si
