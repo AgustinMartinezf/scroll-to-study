@@ -2,8 +2,9 @@
 
 Turns your study material into 30–60 second vertical videos with voice, to review one topic a day.
 It works to **understand a project** (code, report, assignment brief) and to **study a course** for an
-exam (notes, slides, exercises): tables, chats, charts, formulas, sequence diagrams for protocols
-and trees for hierarchies and chains that animate right when the voice names them. Videos in English
+exam (notes, slides, exercises): tables, chats, charts, formulas, sequence diagrams for protocols,
+trees for hierarchies and chains, stacked layers (OSI, TCP/IP, the levels of a system) and code with
+syntax colors that animate right when the voice names them. Videos in English
 or Spanish. It is a **Claude Code** plugin: you use it with your own Claude, and everything stays on
 your computer.
 

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-14
+
+### Added
+
+- `capas`, for layers and levels (the OSI and TCP/IP models, the layers of an operating system, the
+  architecture of a project): 2 to 7 stacked bars of the same width, top down, with the name on the
+  left and an optional detail on the right ("HTTP, DNS"). `{show id}` shows the frame and the layers
+  without a `{show}` of their own; the others appear one by one. `hl`, `good`, `bad` and `strike` work
+  on layers.
+  - The `atravesar` action moves a token from one layer to another during the sentence, lighting the
+    layers in between one by one: encapsulation going down, decapsulation going up.
+- `codigo`, for code (Java, Python, C, SQL, JS, Bash or plain text): up to 12 lines of up to 34
+  characters, with line numbers and its own syntax highlighting (keywords, strings, comments and
+  numbers, in the theme's colors, no external libraries). A line with its own `{show}` appears alone,
+  to build the block step by step; `hl` puts a band behind a line, and `good`, `bad` and `strike` work
+  on lines too.
+  - Code must be copied from the material: `s2s.py guion` checks every non-empty line against
+    `corpus.txt` (normalized like the quotes, without indentation) and fails on a line that is not
+    there, unless the block is marked `"ejemplo": true`, which the video labels "example".
+- Both have seeded entrances: layers cascade top down or bottom up; code appears line by line or is
+  typed.
+
+### Changed
+
+- `prompts/guion.md` sends layers and levels to `capas` (with `atravesar`) and code to `codigo`, shown
+  line by line with `hl` on the key line, and says that code must be copied from the material or marked
+  as an example. The question example situates TCP in the transport layer and the myth example shows the
+  `fork()` call as an example snippet.
+
 ## [0.7.0] - 2026-11-14
 
 ### Changed
@@ -226,7 +255,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...v0.5.0
