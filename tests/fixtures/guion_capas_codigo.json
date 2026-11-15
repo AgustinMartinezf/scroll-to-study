@@ -1,0 +1,181 @@
+{
+ "bloques": [
+  {
+   "fuentes": [
+    "A1"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "capas",
+     "id": "osi",
+     "title": "Modelo OSI",
+     "capas": [
+      {
+       "id": "c7",
+       "text": "7 aplicación",
+       "detalle": "HTTP, DNS",
+       "icon": "users"
+      },
+      {
+       "id": "c6",
+       "text": "6 presentación",
+       "detalle": "TLS, JPEG"
+      },
+      {
+       "id": "c5",
+       "text": "5 sesión",
+       "detalle": "RPC"
+      },
+      {
+       "id": "c4",
+       "text": "4 transporte",
+       "detalle": "TCP, UDP",
+       "kind": "blue"
+      },
+      {
+       "id": "c3",
+       "text": "3 red",
+       "detalle": "IP, ICMP"
+      },
+      {
+       "id": "c2",
+       "text": "2 enlace",
+       "detalle": "Ethernet"
+      },
+      {
+       "id": "c1",
+       "text": "1 física",
+       "detalle": "cable, radio"
+      }
+     ]
+    }
+   ],
+   "frases": [
+    "El modelo {show osi}OSI parte la red en siete capas.",
+    "Un mensaje {atravesar osi de=c7 a=c1 texto=datos}baja desde la aplicación, capa por capa, hasta el cable.",
+    "En el medio, la capa de {hl c4}transporte le pone los puertos.",
+    "Del otro lado sube en el orden inverso."
+   ]
+  },
+  {
+   "fuentes": [
+    "A1"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "codigo",
+     "id": "jv",
+     "title": "Cuenta.java",
+     "lenguaje": "java",
+     "ejemplo": true,
+     "lineas": [
+      "public class Cuenta {",
+      "    private int saldo;",
+      "",
+      "    public void depositar(int m) {",
+      "        if (m <= 0) {",
+      "            throw new Error(\"m\");",
+      "        }",
+      "        saldo += m;  // suma",
+      "    }",
+      "",
+      "    int ver() { return saldo; }",
+      "}"
+     ]
+    }
+   ],
+   "frases": [
+    "Una clase de Java {show jv}guarda el saldo como privado.",
+    "El método depositar {hl jv-l4}revisa el monto antes de sumar.",
+    "Si el monto no sirve, {bad jv-l5}tira un error y no suma nada.",
+    "La línea {good jv-l7}del saldo es la única que cambia el estado."
+   ]
+  },
+  {
+   "fuentes": [
+    "A1"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "codigo",
+     "id": "sq",
+     "lenguaje": "sql",
+     "ejemplo": true,
+     "lineas": [
+      "SELECT s.nombre, COUNT(*)",
+      "FROM socio s",
+      "JOIN prestamo p ON p.ci = s.ci",
+      "WHERE p.vence < '2026-01-01'",
+      "GROUP BY s.nombre;  -- atrasados"
+     ]
+    }
+   ],
+   "frases": [
+    "En SQL la consulta {show sq-l0}elige qué columnas mostrar.",
+    "Después dice {show sq-l1}de qué tabla sale y {show sq-l2}con cuál se junta.",
+    "El filtro {show sq-l3}deja solo los préstamos vencidos.",
+    "Y al final {show sq-l4}{hl sq-l4}agrupa por socio para contarlos."
+   ]
+  },
+  {
+   "fuentes": [
+    "A1"
+   ],
+   "comprobar": [],
+   "elementos": [
+    {
+     "type": "capas",
+     "id": "tcpip",
+     "title": "TCP/IP",
+     "capas": [
+      {
+       "id": "t4",
+       "text": "aplicación",
+       "detalle": "HTTP"
+      },
+      {
+       "id": "t3",
+       "text": "transporte",
+       "detalle": "TCP"
+      },
+      {
+       "id": "t2",
+       "text": "internet",
+       "detalle": "IP"
+      },
+      {
+       "id": "t1",
+       "text": "acceso a la red",
+       "detalle": "Wi-Fi"
+      }
+     ]
+    }
+   ],
+   "frases": [
+    "En TCP/IP quedan {show tcpip}cuatro capas: {show t1}acceso, {show t2}internet, {show t3}transporte y {show t4}aplicación.",
+    "La respuesta {atravesar tcpip de=t1 a=t4}sube desde el acceso a la red hasta la aplicación.",
+    "Las capas de sesión {strike t3}no tienen una capa propia acá.",
+    "Por eso {boom tcpip}{bad t2}internet no sabe nada de puertos."
+   ]
+  }
+ ],
+ "final": {
+  "frases": [
+   "Para acordarte: {show fl1}cada capa le habla a la de al lado.",
+   "{show fnext}Mañana: encapsulación."
+  ],
+  "lineas": [
+   "cada capa le habla <b>a la de al lado</b>"
+  ],
+  "mañana": "encapsulación"
+ },
+ "lexico": {
+  "osi": "o~ese~i",
+  "sql": "ese~cu~ele",
+  "tcp/ip": "te~ce~pe~i~pe",
+  "http": "hache~te~te~pe"
+ }
+}
