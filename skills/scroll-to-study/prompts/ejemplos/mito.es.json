@@ -5,11 +5,12 @@
    "comprobar": [],
    "elementos": [
     {"type": "dialog", "id": "nov", "char": "novato", "text": "fork() copia toda la memoria, ¿no?"},
+    {"type": "codigo", "id": "fk", "lenguaje": "c", "ejemplo": true, "lineas": ["pid_t pid = fork();", "if (pid == 0) {", "    /* hijo */", "} else {", "    /* padre */", "}"]},
     {"type": "chip", "id": "mal", "text": "fork() copia toda la memoria", "kind": "bad", "mono": true}
    ],
    "frases": [
     "¿Llamar a {show nov}fork copia toda la memoria del proceso?",
-    "Parece obvio: el hijo es una {show mal}[-copia] exacta del padre.",
+    "Parece obvio: tras {show fk}{hl fk-l0 +0.4}esta línea, el hijo es una {show mal}[-copia] exacta del padre.",
     "Pero en los sistemas modernos, {strike mal}no es así."
    ]
   },

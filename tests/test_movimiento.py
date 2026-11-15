@@ -30,10 +30,11 @@ def test_fnv1a_y_mulberry32_son_estables():
 
 def test_la_misma_semilla_elige_lo_mismo_y_cada_tipo_tiene_de_3_a_5_entradas():
     assert animacion.elegir("t01\nRedes", "mito") == animacion.elegir("t01\nRedes", "mito")
-    for tipo, ops in animacion.ENTRADAS.items():
+    for tipo, ops in {**animacion.ENTRADAS, **animacion.ENTRADAS_0_8}.items():
         assert 3 <= len(ops) <= 5 and ops[0] == "escala", tipo
         assert "letras" not in ops or tipo in ("chip", "big", "toast"), tipo
-        assert "cascada" not in ops or tipo in ("table", "list", "row", "arbol", "chart", "flow"), tipo
+        assert "cascada" not in ops or tipo in ("table", "list", "row", "arbol", "chart", "flow", "capas"), tipo
+        assert not {"subida", "lineas", "escribir"} & set(ops) or tipo in ("capas", "codigo"), tipo
     assert 3 <= len(animacion.TRANSICIONES) <= 4
 
 

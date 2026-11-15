@@ -130,7 +130,12 @@ function colorear(el, t, fondo, tinta, linea) {   // hl, good, bad y ruta sobre 
   }
   tl.fromTo(el, { scale: 1 }, { scale: 1.08, transformOrigin: "50% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
 }
-const aparecido = new Set();   // nodos que una ruta ya hizo aparecer
+const aparecido = new Set();
+// una línea de código se resalta con una banda translúcida: el resaltado de sintaxis se sigue leyendo
+function banda(el, t, color) {
+  tl.to(el, { backgroundColor: color, duration: 0.25 }, t);
+  tl.fromTo(el, { scale: 1 }, { scale: 1.03, transformOrigin: "0% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
+}   // nodos que una ruta ya hizo aparecer
 // apariciones compuestas
 function rodar(el, t) {
   el.querySelectorAll(".dg").forEach((d, i) => tl.fromTo(d.querySelector(".dcol"), { yPercent: 0 },
@@ -151,7 +156,8 @@ const ENT = S.ENT || {};
 function partesDe(el) {   // las partes visibles de un elemento, para la cascada
   const c = el.classList;
   const sel = c.contains("tbl") ? ".row" : c.contains("lcard") ? ".li" : c.contains("crow") ? ":scope > .chip"
-    : c.contains("chart") ? ".bar" : c.contains("flow") ? ".fbox, .farrow" : c.contains("arbol") ? ".dnodo" : null;
+    : c.contains("chart") ? ".bar" : c.contains("flow") ? ".fbox, .farrow" : c.contains("arbol") ? ".dnodo"
+    : c.contains("capas") ? ".capa" : c.contains("codigo") ? ".cl" : null;
   if (!sel) return [];
   return [...el.querySelectorAll(sel)].filter(p => !HID.has(p.id) && !(p.dataset && p.dataset.padre)
     && !(p.classList.contains("farrow") && p.nextElementSibling && HID.has(p.nextElementSibling.id)));
@@ -169,9 +175,25 @@ function entrar(el, id, t, ent) {
       ease: ent === "letras" ? "steps(" + n + ")" : "power2.inOut" }, t);
     tl.set(sel, { clipPath: "none" }, t + dur + 0.01);   // sin recorte al final: vuelve la sombra de la tarjeta
   }
-  else if (ent === "cascada") {
+  else if (ent === "cascada" || ent === "subida") {   // subida: de abajo hacia arriba (capas)
     tl.fromTo(sel, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, t);
-    partesDe(el).forEach((p, k) => tl.fromTo(p, { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, t + 0.15 + k * 0.09));
+    const partes = ent === "subida" ? partesDe(el).reverse() : partesDe(el), dy = ent === "subida" ? -28 : 28;
+    partes.forEach((p, k) => tl.fromTo(p, { opacity: 0, y: dy }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, t + 0.15 + k * 0.09));
+  }
+  else if (ent === "lineas") {        // código: aparece línea por línea
+    tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.25 }, t);
+    partesDe(el).forEach((p, k) => tl.fromTo(p, { opacity: 0, x: -36 }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out" }, t + 0.1 + k * 0.07));
+  }
+  else if (ent === "escribir") {      // código: cada línea se escribe, una después de otra
+    tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.2 }, t);
+    const partes = partesDe(el), total = Math.min(1.6, 0.12 * partes.length + 0.2);
+    let tt = t + 0.15;
+    partes.forEach(p => {
+      const n = Math.max(1, Math.min(34, (p.querySelector(".ctx") || p).textContent.length)), d = total / partes.length;
+      tl.fromTo(p, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: d, ease: "steps(" + n + ")" }, tt);
+      tl.set(p, { clipPath: "none" }, tt + d + 0.01);
+      tt += d;
+    });
   }
 }
 function cuentaRegresiva(el, t) {
@@ -245,7 +267,7 @@ S.EV.forEach(e => {
         talk(cid, t + 0.2, x.until !== undefined ? x.until : endOfPhrase(t));
         if (!shownChars[cid]) { shownChars[cid] = 1; alive(cid, t + 0.6, D); }
       }
-      else if (cls.contains("li") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
+      else if (cls.contains("li") || cls.contains("capa") || cls.contains("cl") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
       else if (cls.contains("arrow")) {
         tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.1 }, t);
         tl.fromTo(q(id + "-p"), { scaleY: 0, transformOrigin: "50% 0%" }, { scaleY: 1, duration: 0.35, ease: "power2.out" }, t);
@@ -276,10 +298,12 @@ S.EV.forEach(e => {
     case "hide": tl.to(q(id), { opacity: 0, scale: 0.6, duration: 0.25, ease: "power3.in" }, t); break;
     case "hl": if (isReg(id)) { region(id, t, C.regionHl, 0.75); break; }
       if (esDiagrama(el)) { colorear(el, t, C.hl, C.hlInk, C.ruta); break; }
+      if (cls.contains("cl")) { banda(el, t, C.codBanda); break; }
       tl.to(q(id), { backgroundColor: x.bg || C.hl, color: x.color || C.hlInk, duration: 0.25 }, t);
       tl.fromTo(q(id), { scale: 1 }, { scale: 1.08, duration: 0.15, yoyo: true, repeat: 1 }, t); break;
     case "good":
-      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaBien : C.good, el.classList.contains("dmsg") ? C.celdaBien : C.goodInk, C.celdaBien);
+      if (cls.contains("cl")) banda(el, t, C.codBien);
+      else if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaBien : C.good, el.classList.contains("dmsg") ? C.celdaBien : C.goodInk, C.celdaBien);
       else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaBien, duration: 0.25 }, t); tl.fromTo(q(id + "-ok"), { opacity: 0, scale: 2, rotation: -30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaBien, backgroundColor: C.filaBien, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.celdaBien, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaBien, duration: 0.25 }, t); }
@@ -287,7 +311,8 @@ S.EV.forEach(e => {
       else tl.to(q(id), { backgroundColor: C.good, color: C.goodInk, duration: 0.25 }, t);
       break;
     case "bad":
-      if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaMal : C.bad, el.classList.contains("dmsg") ? C.celdaMal : C.badInk, C.celdaMal);
+      if (cls.contains("cl")) banda(el, t, C.codMal);
+      else if (esDiagrama(el)) colorear(el, t, el.classList.contains("dmsg") ? C.filaMal : C.bad, el.classList.contains("dmsg") ? C.celdaMal : C.badInk, C.celdaMal);
       else if (isRow(id)) { tl.to(q(id), { backgroundColor: C.filaMal, duration: 0.25 }, t); tl.to(q(id + "-ok"), { opacity: 0, duration: 0.1 }, t); tl.fromTo(q(id + "-no"), { opacity: 0, scale: 2, rotation: 30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: "back.out(2)" }, t); }
       else if (isCell(id)) tl.to(q(id), { color: C.celdaMal, backgroundColor: C.filaMal, duration: 0.25 }, t);
       else if (isBar(id)) { tl.to(el.querySelector(".bfill"), { backgroundColor: C.bad, duration: 0.25 }, t); tl.to(q(id), { color: C.celdaMal, duration: 0.25 }, t); }
@@ -336,6 +361,26 @@ S.EV.forEach(e => {
         }
         colorear(n, tk, fondo, tinta, fondo);
       });
+      break; }
+    case "atravesar": {   // una ficha viaja de una capa a otra y resalta de a una las del medio, en el tiempo de la frase
+      const capas = [...el.querySelectorAll(".capa")], caja = el.querySelector(".cbox");
+      const i0 = capas.findIndex(c => c.id === x.de), i1 = capas.findIndex(c => c.id === x.a);
+      const centro = c => c.offsetTop + c.offsetHeight / 2;
+      const fi = document.createElement("div"); fi.className = "ficha";
+      fi.textContent = x.texto || ""; if (!x.texto) fi.classList.add("punto");
+      fi.style.background = C.ficha; fi.style.color = C.fichaInk;
+      caja.appendChild(fi); gsap.set(fi, { opacity: 0 });
+      const xc = capas[0].offsetLeft + capas[0].offsetWidth + (caja.clientWidth - capas[0].offsetLeft - capas[0].offsetWidth) / 2;
+      const dur = Math.max(0.8, Math.min(3, endOfPhrase(t) - t - 0.2)), tramo = Math.abs(i1 - i0);
+      tl.set(fi, { left: xc, top: centro(capas[i0]), xPercent: -50, yPercent: -50, y: 0, scale: 0.5 }, t);
+      tl.to(fi, { opacity: 1, scale: 1, duration: 0.15 }, t);
+      tl.to(fi, { y: centro(capas[i1]) - centro(capas[i0]), duration: dur, ease: "none" }, t + 0.1);
+      for (let k = Math.min(i0, i1) + 1; k < Math.max(i0, i1); k++) {
+        const tk = t + 0.1 + dur * Math.abs(k - i0) / tramo;
+        tl.to(capas[k], { backgroundColor: C.ruta, color: C.rutaInk, duration: 0.2 }, tk - 0.1);
+        tl.fromTo(capas[k], { scale: 1 }, { scale: 1.04, duration: 0.12, yoyo: true, repeat: 1 }, tk - 0.1);
+      }
+      tl.to(fi, { opacity: 0, scale: 0.6, duration: 0.2 }, t + 0.1 + dur);
       break; }
     case "swap": { const a = $(id + "-alt");   // el giro es un scaleY (2D): girar en X crearía una capa 3D
       tl.fromTo(a, { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.35, ease: "back.out(1.6)" }, t); break; }

@@ -164,9 +164,10 @@ AQUI = Path(__file__).resolve().parent
 
 
 def validar_guion(guion: dict[str, Any], inv: dict[str, Any], idioma: str = "es",
-                  modo: str = "proyecto") -> tuple[dict[str, Any], list[str], list[str]]:
+                  modo: str = "proyecto", corpus: str | None = None) -> tuple[dict[str, Any], list[str], list[str]]:
     """Compila el guion como s2s.py guion: léxico del idioma más el del guion, textos del cierre según el
-    modo, íconos permitidos y fuentes contra el inventario. Devuelve (spec, errores, avisos)."""
+    modo, íconos permitidos, fuentes contra el inventario y, si se pasa el texto del material (corpus.txt),
+    las líneas de código que no son ejemplo contra él. Devuelve (spec, errores, avisos)."""
     from compile import compilar
     i = IDIOMAS[idioma]; tx = {**i, **i[modo]}
     lex = {k.lower(): v for k, v in leer(AQUI / tx["lexico"]).items()}
@@ -177,7 +178,7 @@ def validar_guion(guion: dict[str, Any], inv: dict[str, Any], idioma: str = "es"
         guion["final"].setdefault("decilo", tx["decilo"])
         # titulo, decilo y etiqueta_manana se pueden pisar desde el guion (la guía del README lo hace)
         guion["final"].setdefault("etiqueta_manana", f"{tx['manana']}: {guion['final'].get('mañana', '')}")
-    spec, rep = compilar(guion, lex, AQUI / "iconos", inv, ritmo=tx["ritmo"])
+    spec, rep = compilar(guion, lex, AQUI / "iconos", inv, ritmo=tx["ritmo"], corpus=corpus)
     return spec, rep.errores, rep.avisos
 
 

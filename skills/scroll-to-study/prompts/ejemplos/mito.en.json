@@ -5,11 +5,12 @@
    "comprobar": [],
    "elementos": [
     {"type": "dialog", "id": "nov", "char": "novato", "text": "fork() copies all the memory, right?"},
+    {"type": "codigo", "id": "fk", "lenguaje": "c", "ejemplo": true, "lineas": ["pid_t pid = fork();", "if (pid == 0) {", "    /* child */", "} else {", "    /* parent */", "}"]},
     {"type": "chip", "id": "mal", "text": "fork() copies all the memory", "kind": "bad", "mono": true}
    ],
    "frases": [
     "Does calling {show nov}fork copy all of a process's memory?",
-    "It seems obvious: the child is an exact {show mal}[-copy] of the parent.",
+    "It seems obvious: after {show fk}{hl fk-l0 +0.4}this line, the child is an exact {show mal}[-copy] of the parent.",
     "But on modern systems, {strike mal}it does not."
    ]
   },
