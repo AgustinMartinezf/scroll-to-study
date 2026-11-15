@@ -6,6 +6,7 @@ composición de HyperFrames; reproductor.py la convierte en un video que se repr
 """
 import json, re, os, sys, html as H
 from config import CFG
+import animacion
 
 # estilo visual: temas/<nombre>.json (+ .css). Segundo argumento o S2S_ESTILO; por defecto, cuaderno
 ESTILO = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("S2S_ESTILO", "cuaderno")
@@ -367,48 +368,6 @@ for si, gen in enumerate(getattr(SPEC, "GENERAL", [])):
         _txt_general = {"es": "método general · no está en tu material", "en": "general method · not in your material"}
         STATIONS[si] = [{"type": "chip", "id": f"gen{si}", "text": _txt_general.get(getattr(SPEC, "IDIOMA", "es"), _txt_general["es"]),
                          "kind": "neutral", "icon": "lightning", "fs": 32, "gap": 24}] + list(STATIONS[si])
-GAP_Y = 520
-station_html = []; boxes = []
-y = 300
-for si, st in enumerate(STATIONS):
-    x = 540 if si % 2 == 0 else 1800
-    items = []; cy = 0; maxw = 0
-    for e in st:
-        h_, w_, hh = MAKERS[e["type"]](e)
-        items.append((e, h_, w_, hh, cy)); cy += hh + e.get("gap", 40); maxw = max(maxw, w_)
-    hgt = cy - 40
-    top = y
-    inner = ""
-    for e, h_, w_, hh, oy in items:
-        al = e.get("align", "center")
-        left = x - 490 if al == "left" else (x + 490 - w_ if al == "right" else x - w_ / 2)
-        left = max(x - 490, min(left, x + 490 - w_))
-        inner += f'<div class="slot" style="left:{left:.0f}px; top:{top+oy:.0f}px; width:{w_:.0f}px;">{h_}</div>\n'
-    station_html.append(inner)
-    boxes.append({"x": x, "top": top, "h": hgt, "w": max(maxw, 600)})
-    y = top + hgt + GAP_Y
-
-paths = []
-for i in range(len(boxes) - 1):
-    a, b = boxes[i], boxes[i + 1]
-    y0 = a["top"] + a["h"] + 40; y1 = b["top"] - 40
-    paths.append(f'<path id="pth{i}" d="M{a["x"]} {y0} C{a["x"]} {y0+260} {b["x"]} {y1-260} {b["x"]} {y1}" stroke="{TP["camino"]}" stroke-width="12" fill="none" stroke-linecap="round"/>')
-WORLD_H = y + 400
-
-# ---------- eventos ----------
-EV = []
-for ev in SPEC.EVENTS:
-    when, act, tid = ev[0], ev[1], ev[2]
-    extra = ev[3] if len(ev) > 3 else {}
-    EV.append({"t": T(when), "a": act, "id": tid, "x": extra})
-# final
-EV.append({"t": T(FINAL["start"]), "a": "show", "id": "fcard", "x": {}})
-EV.append({"t": T(FINAL["start"]) + 0.15, "a": "show", "id": "fpro", "x": {}})
-for (lid, _, when) in FINAL["lines"]:
-    EV.append({"t": T(when), "a": "show", "id": lid, "x": {"from": "left"}})
-EV.append({"t": T(FINAL["next_at"]), "a": "show", "id": "fnext", "x": {}})
-EV.sort(key=lambda e: e["t"])
-
 # a qué estación pertenece cada id
 owner = {}
 def collect(e, si):
@@ -439,6 +398,151 @@ def collect(e, si):
             if n.get("padre") is not None: owner[f'{e["id"]}-e-{n["id"]}'] = si
 for si, st in enumerate(STATIONS):
     for e in st: collect(e, si)
+
+
+# ---------- puesta en escena: entradas, transición y disposición (animacion.py) ----------
+# la semilla: el id del tema (la carpeta) y el título de la lista; el formato lo pasa s2s.py
+SEMILLA = os.environ.get("S2S_SEMILLA") or os.path.basename(os.path.normpath(HERE))
+FORMATO = os.environ.get("S2S_FORMATO") or getattr(SPEC, "FORMATO", "")
+ANIM = animacion.elegir(SEMILLA, FORMATO)
+DISP = ANIM["disposicion"]
+# entrada de cada elemento de primer nivel ("escala", la de siempre, no hace falta decirla)
+ENT = {e["id"]: ANIM["entradas"][e["type"]] for st in STATIONS for e in st
+       if ANIM["entradas"].get(e["type"], "escala") != "escala"}
+# primera aparición de cada id (para el orden de los lados A y B de una pantalla partida)
+primera = {}
+for ev in SPEC.EVENTS:
+    if ev[1] == "show": primera.setdefault(ev[2], T(ev[0]))
+acciones_de = {}   # estación -> acciones que la tocan (para saber cuál es la idea equivocada de un mito)
+for ev in SPEC.EVENTS:
+    if ev[2] in owner: acciones_de.setdefault(owner[ev[2]], set()).add(ev[1])
+
+GAP_Y = 520
+# una estación debajo de otra tiene que quedar fuera de cuadro: con la cámara más lejos (escala 0,877 por el
+# ancho de 980 px) se ven ~1100 px por debajo de una estación baja
+GAP_Y_VERTICAL = 1100
+COL_PARTIDA = 470          # ancho de cada lado de una pantalla partida
+FS_MIN = 28                # compile.FS_MIN: un lado de la pantalla partida no se achica por debajo de esta letra
+
+def fs_base(e):
+    """La letra principal de un elemento sin achicar (la que calculó compile.py o la fija de engine.py)."""
+    return e.get("fs") or {"formula": 64, "big": 110, "counter": 150}.get(e["type"], 40)
+
+def pares_partida(st, hechos):
+    """En una pantalla partida (avsb), los elementos de cada tipo que aparece un número par de veces van de a
+    dos, en el orden en que aparecen: el primero a la izquierda (lado A) y el segundo a la derecha (lado B).
+    Un tipo cuyos elementos quedarían con letra de menos de FS_MIN px al achicarlos para que entren en su
+    mitad queda en una columna.
+    Devuelve {tipo: [[a, b], ...]}."""
+    cuenta = {}
+    for e in st:
+        if not e["id"].startswith("gen"): cuenta[e["type"]] = cuenta.get(e["type"], 0) + 1
+    out = {}
+    for tipo, n in cuenta.items():
+        if n < 2 or n % 2:
+            continue
+        orden = sorted((e for e in st if e["type"] == tipo and not e["id"].startswith("gen")),
+                       key=lambda e: (primera.get(e["id"], 1e9), st.index(e)))
+        if all(fs_base(e) * min(1, (COL_PARTIDA - 10) / hechos[e["id"]][1]) >= FS_MIN for e in orden):
+            out[tipo] = [orden[k:k + 2] for k in range(0, len(orden), 2)]
+    return out
+
+def armar(st, x, top, partida):
+    """El html de una estación centrada en x desde top, y su alto y ancho."""
+    hechos = {e["id"]: MAKERS[e["type"]](e) for e in st}
+    pares = pares_partida(st, hechos) if partida else {}
+    filas = []          # cada fila: [(elemento, centro x o None)]
+    for e in st:
+        if e["type"] in pares and not e["id"].startswith("gen"):
+            # los pares de ese tipo van donde estaba el primero de ellos en el bloque
+            if e is min((e2 for par in pares[e["type"]] for e2 in par), key=st.index):
+                for a, b in pares[e["type"]]:
+                    filas.append([(a, x - COL_PARTIDA / 2 - 5), (b, x + COL_PARTIDA / 2 + 5)])
+            continue
+        filas.append([(e, None)])
+    inner, cy, maxw = "", 0, 0
+    for fila in filas:
+        alto = 0
+        for e, cx in fila:
+            h_, w_, hh = hechos[e["id"]]
+            if cx is None:            # columna normal
+                al = e.get("align", "center")
+                left = x - 490 if al == "left" else (x + 490 - w_ if al == "right" else x - w_ / 2)
+                left = max(x - 490, min(left, x + 490 - w_))
+                inner += f'<div class="slot" style="left:{left:.0f}px; top:{top+cy:.0f}px; width:{w_:.0f}px;">{h_}</div>\n'
+                alto = max(alto, hh); maxw = max(maxw, w_)
+            else:                     # un lado de la pantalla partida: achicado para entrar en su mitad
+                k = min(1, (COL_PARTIDA - 10) / w_)
+                inner += (f'<div class="slot" style="left:{cx - w_ / 2:.0f}px; top:{top+cy:.0f}px; width:{w_:.0f}px; '
+                          f'transform:scale({k:.3f}); transform-origin:50% 0">{h_}</div>\n')
+                alto = max(alto, hh * k); maxw = max(maxw, 2 * COL_PARTIDA + 10)
+        cy += alto + fila[0][0].get("gap", 40)
+    return inner, cy - 40, maxw, bool(pares)
+
+def equivocada(si):
+    """En un mito, la escena de la idea equivocada es la que tacha o marca algo en rojo."""
+    return bool(acciones_de.get(si, set()) & {"strike", "bad"})
+
+station_html = []; boxes = []; trans = {}; partidas = []
+filas_de = []   # (top, alto) de cada fila de la grilla
+y = 300
+for si, st in enumerate(STATIONS):
+    final = si == len(STATIONS) - 1
+    estilo = ANIM["transicion"]
+    if DISP == "zigzag":
+        x, top = (540 if si % 2 == 0 else 1800), y
+    elif DISP == "lados":           # mito: la idea equivocada a la izquierda, la correcta a la derecha
+        prev = boxes[-1] if boxes else None
+        if si > 0 and not equivocada(si) and equivocada(si - 1) and prev["x"] == 540:
+            x, top = 1800, prev["top"]
+            estilo = "paneo"            # de una a otra, la cámara pasa de costado
+        else:
+            x, top = (540 if equivocada(si) else 1800), y
+    elif DISP == "grilla":          # historia: viñetas de 2 x 2, recorridas en orden
+        x = 540 if si % 2 == 0 else 1800
+        top = y if si % 2 == 0 else boxes[-1]["top"]
+    else:                           # columna, progreso (pasos) y partida (avsb): una columna
+        x, top = 540, y
+    inner, hgt, maxw, partida = armar(st, x, top, DISP == "partida" and not final)
+    if partida: partidas.append(si)
+    station_html.append(inner)
+    boxes.append({"x": x, "top": top, "h": hgt, "w": max(maxw, 600)})
+    if si > 0: trans[si] = estilo
+    # la fila siguiente empieza debajo de la más alta de las estaciones que comparten esta fila
+    gap = GAP_Y if DISP == "zigzag" else GAP_Y_VERTICAL
+    y = max(y, top + hgt + gap) if DISP in ("lados", "grilla") else top + hgt + gap
+
+def camino(a, b):
+    """El camino dibujado de una estación a la siguiente (solo en la transición «viaje»)."""
+    if b["top"] < a["top"] + a["h"] and abs(b["x"] - a["x"]) > 600:     # lado a lado: de costado
+        s = 1 if b["x"] > a["x"] else -1
+        x0, x1 = a["x"] + s * 520, b["x"] - s * 520
+        y0 = a["top"] + min(a["h"], 400) / 2; y1 = b["top"] + min(b["h"], 400) / 2
+        return f"M{x0} {y0:.0f} C{x0 + s * 120} {y0:.0f} {x1 - s * 120} {y1:.0f} {x1} {y1:.0f}"
+    y0 = a["top"] + a["h"] + 40; y1 = b["top"] - 40
+    return f"M{a['x']} {y0} C{a['x']} {y0+260} {b['x']} {y1-260} {b['x']} {y1}"
+
+paths = [f'<path id="pth{si - 1}" d="{camino(boxes[si - 1], boxes[si])}" stroke="{TP["camino"]}" stroke-width="12" '
+         f'fill="none" stroke-linecap="round"/>' for si in range(1, len(boxes)) if trans[si] == "viaje"]
+# historia: cada escena es una viñeta con su marco (decoración, como los caminos)
+vinetas = "".join(f'<rect x="{b["x"] - 520}" y="{b["top"] - 50}" width="1040" height="{b["h"] + 100}" rx="44" fill="none" '
+                  f'stroke="{TP["inicio"]}" stroke-width="6" stroke-dasharray="18 14"/>'
+                  for b in boxes[:-1]) if DISP == "grilla" else ""
+WORLD_H = y + 400
+
+# ---------- eventos ----------
+EV = []
+for ev in SPEC.EVENTS:
+    when, act, tid = ev[0], ev[1], ev[2]
+    extra = ev[3] if len(ev) > 3 else {}
+    EV.append({"t": T(when), "a": act, "id": tid, "x": extra})
+# final
+EV.append({"t": T(FINAL["start"]), "a": "show", "id": "fcard", "x": {}})
+EV.append({"t": T(FINAL["start"]) + 0.15, "a": "show", "id": "fpro", "x": {}})
+for (lid, _, when) in FINAL["lines"]:
+    EV.append({"t": T(when), "a": "show", "id": lid, "x": {"from": "left"}})
+EV.append({"t": T(FINAL["next_at"]), "a": "show", "id": "fnext", "x": {}})
+EV.sort(key=lambda e: e["t"])
 
 # entrada a cada estación = primer evento que la toca
 enter = {0: 0.0}
@@ -530,11 +634,27 @@ for e in EV:
     elif e["a"] == "strike": sfx("click-soft.mp3", t, 0.45)
     elif e["a"] == "ruta": sfx("click.mp3", t, 0.35)
 
+# pasos: la línea de progreso avanza en cada paso (cada good; si hay menos de dos, cada escena nueva)
+PASOS = sorted(e["t"] for e in EV if e["a"] == "good" and owner[e["id"]] < len(STATIONS) - 1)
+if len(PASOS) < 2:
+    PASOS = [enter.get(0, 0.0)] + [travel[si] + 0.5 for si in range(1, len(STATIONS) - 1)]
+PASOS = [round(t, 3) for t in PASOS] if DISP == "progreso" else []
+# pregunta: la escena de la cuenta regresiva, más cerca
+CERCA = [si for si, st in enumerate(STATIONS) if DISP == "columna" and any(e["type"] == "countdown" for e in st)]
+tipos_usados = [e["type"] for st in STATIONS for e in st]
+json.dump({**animacion.resumen(ANIM, tipos_usados), "semilla": SEMILLA, "partidas": partidas},
+          open(f"{HERE}/animacion.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+
 STATE = {"C": TEMA["c"], "D": D, "boxes": boxes, "EV": EV, "travel": travel, "hidden": hidden, "words": words, "phrases": phrases,
          "chars": [e["id"] + "-c" for st in STATIONS for e in st if e["type"] == "dialog"],
          "charStation": {e["id"] + "-c": si for si, st in enumerate(STATIONS) for e in st if e["type"] == "dialog"},
-         "enter": enter, "nst": len(STATIONS), "stEls": [[e["id"] for e in st] for st in STATIONS]}
+         "enter": enter, "nst": len(STATIONS), "stEls": [[e["id"] for e in st] for st in STATIONS],
+         "ENT": ENT, "LADO": ANIM["lado"], "TRANS": trans, "PASOS": PASOS, "CERCA": CERCA}
 
+# la línea de progreso de los pasos: fija a la izquierda, dentro de las zonas seguras
+PROGRESO = (f'<div id="progreso" class="abs" style="left:66px;top:300px;width:12px;height:1150px;border-radius:6px;'
+            f'background:{TP["inicio"]}"><div id="progreso-l" style="width:100%;height:100%;border-radius:6px;'
+            f'background:{TP["camino"]};transform-origin:50% 0"></div></div>') if PASOS else ""
 CSS = open(CFG["css"], encoding="utf-8").read()
 if TEMA.get("css"):
     CSS += "\n" + open(os.path.join(os.path.dirname(_ruta_tema), TEMA["css"]), encoding="utf-8").read()
@@ -547,9 +667,9 @@ HTML = f"""<!doctype html>
 <div id="stage" class="clip" data-start="0" data-duration="{D}" data-track-index="1" data-layout-allow-overflow data-layout-allow-overlap>
 <div id="shake" class="abs" style="left:0;top:0;width:1080px;height:1920px;">
 <div id="drift" class="abs" style="left:0;top:0;width:1080px;height:1920px;transform-origin:540px 960px"><div id="world" style="height:{WORLD_H}px">
-<svg class="abs" style="left:0;top:0;overflow:visible" width="2600" height="{WORLD_H}"><path d="M540 -600 L540 260" stroke="{TP['inicio']}" stroke-width="10" fill="none" stroke-dasharray="4 26" stroke-linecap="round"/>{"".join(paths)}</svg>
+<svg class="abs" style="left:0;top:0;overflow:visible" width="2600" height="{WORLD_H}"><path d="M{boxes[0]['x']} -600 L{boxes[0]['x']} 260" stroke="{TP['inicio']}" stroke-width="10" fill="none" stroke-dasharray="4 26" stroke-linecap="round"/>{vinetas}{"".join(paths)}</svg>
 {"".join(station_html)}
-</div></div></div></div>
+</div></div></div>{PROGRESO}</div>
 <div id="caps" class="abs" style="left:0;top:0;width:1080px;height:1920px;pointer-events:none;">
 {chr(10).join(cap_html)}
 </div>

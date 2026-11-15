@@ -114,8 +114,10 @@ def test_sonoridad_como_ebu_r128():
 def test_estilos(tmp_path, estilo, color):
     spec, _ = compilar(EJEMPLO, json.loads((SKILL / "scripts" / "lexico.json").read_text(encoding="utf-8")))
     d = tmp_path / "t01"; escribir_salidas(d, spec); generar(d)
+    # con la transición «viaje», la que dibuja un camino entre escenas
     subprocess.run([sys.executable, str(SKILL / "scripts" / "engine.py"), str(d), estilo], check=True,
-                   capture_output=True, env={**os.environ, "S2S_DATOS": str(tmp_path / "datos")})
+                   capture_output=True, env={**os.environ, "S2S_DATOS": str(tmp_path / "datos"),
+                                             "S2S_ANIMACION": '{"transicion": "viaje"}'})
     html = (d / "index.html").read_text(encoding="utf-8")
     assert f'stroke="{color}"' in html                                   # el camino toma el color del estilo
     assert ("#f6f1e3" in html) == (estilo == "cuaderno")                 # papel solo en cuaderno
