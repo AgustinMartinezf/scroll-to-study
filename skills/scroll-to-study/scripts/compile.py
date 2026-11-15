@@ -31,7 +31,7 @@ def norm(w: str) -> str:
 
 
 ACCIONES = {"show", "hide", "hl", "good", "bad", "strike", "swap", "type",
-            "pulse", "shake", "boom", "point", "focus", "send", "ruta"}
+            "pulse", "shake", "boom", "point", "focus", "send", "ruta", "atravesar"}
 EXTRAS_VALIDOS = {"from", "rot", "until", "bg", "color", "dur", "s", "dy", "de", "a", "texto", "hasta", "kind"}
 KINDS = {"good", "bad", "warn", "neutral", "blue", "white", "purple"}
 ROLES = {"novato", "pro", "estudiante", "admin", "docente"}
@@ -58,6 +58,7 @@ TIPOS: dict[str, tuple[set[str], set[str]]] = {
     "countdown": ({"id"}, {"seconds"}),
     "secuencia": ({"id", "partes", "mensajes"}, {"title"}),
     "arbol":   ({"id", "nodos"}, {"title"}),
+    "capas":   ({"id", "capas"}, {"title"}),
 }
 COMUNES = {"type", "gap", "align"}
 LAYOUT_DEL_COMPILADOR = {"fs", "w", "col", "fila", "pos", "caja_h", "alto"}   # si el LLM los pone, se ignoran
@@ -86,6 +87,11 @@ ARBOL_NIVELES = 4
 ARBOL_HIJOS = 4
 ARBOL_GAP_X = 20              # separación mínima entre dos cajas vecinas
 ARBOL_GAP_Y = 70              # entre un nivel y el siguiente
+CAPAS_N = (2, 7)
+CAPAS_TEXTO_MAX = 22
+CAPAS_DETALLE_MAX = 26
+CAPAS_CARRIL = 160            # a la derecha de las barras, por donde viaja la ficha de atravesar
+CAPAS_K_DETALLE = 0.72        # el detalle va más chico que el nombre de la capa
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +281,7 @@ class Ids:
     mensajes: dict[str, tuple[str, int]] = field(default_factory=dict)   # id-mK -> (id de la secuencia, K)
     arboles: dict[str, dict[str, str | None]] = field(default_factory=dict)   # id del árbol -> {nodo: padre}
     nodos: dict[str, str] = field(default_factory=dict)                  # id de nodo -> id de su árbol
+    capas: dict[str, list[str]] = field(default_factory=dict)             # id del elemento capas -> sus capas
 
 
 # ---------------------------------------------------------------------------
@@ -455,6 +462,18 @@ def layout_arbol(nodos: list[dict[str, Any]]) -> dict[str, Any]:
     pos = {i: [round(x[i], 1), round(6 + h / 2 + nivel[i] * (h + ARBOL_GAP_Y), 1), round(caja(por_id[i], fs), 1)]
            for i in hijos}
     return {"fs": fs, "caja_h": h, "alto": 12 + niveles * h + (niveles - 1) * ARBOL_GAP_Y, "pos": pos}
+
+
+def fs_capas(capas: list[dict[str, Any]]) -> int:
+    """La mayor letra (tope DIAG_FS) con la que el nombre a la izquierda y el detalle a la derecha (más chico)
+    entran en una barra de DIAG_ANCHO - CAPAS_CARRIL."""
+    ancho = DIAG_ANCHO - CAPAS_CARRIL - 56            # menos los márgenes de adentro de la barra
+    fs = DIAG_FS
+    for c in capas:
+        ic = 1 if c.get("icon") else 0
+        letras = K_LETRA * (len(c["text"]) + CAPAS_K_DETALLE * len(c.get("detalle", ""))) + ic
+        fs = min(fs, int((ancho - 30 * bool(c.get("detalle")) - 12 * ic) / max(letras, 1)))
+    return fs
 
 
 def validar_arbol(nodos: Any, donde: str, rep: Reporte) -> list[dict[str, Any]] | None:
@@ -709,6 +728,37 @@ def preparar_elemento(e: dict[str, Any], donde: str, rep: Reporte, ids: Ids,
             rep.error(donde, f"el árbol no entra en {ANCHO_MAX}px ni con letra {FS_MIN}px ({hojas} hojas lado a "
                              f"lado; el texto más largo es «{largo}»): usá menos nodos (menos hojas) o textos más cortos")
             return None
+    elif tipo == "capas":
+        capas = e["capas"]
+        if not isinstance(capas, list) or not CAPAS_N[0] <= len(capas) <= CAPAS_N[1]:
+            rep.error(donde, f"capas: entre {CAPAS_N[0]} y {CAPAS_N[1]}, de arriba hacia abajo")
+            return None
+        limpias = []
+        for k, c in enumerate(capas):
+            if not isinstance(c, dict) or not isinstance(c.get("id"), str) or not isinstance(c.get("text"), str):
+                rep.error(donde, f"la capa {k} tiene que ser {{\"id\": …, \"text\": …, \"detalle\": …}}")
+                return None
+            if len(c["text"]) > CAPAS_TEXTO_MAX:
+                rep.error(donde, f"el texto de la capa «{c['id']}» pasa de {CAPAS_TEXTO_MAX} caracteres")
+            if len(str(c.get("detalle", ""))) > CAPAS_DETALLE_MAX:
+                rep.error(donde, f"el detalle de la capa «{c['id']}» pasa de {CAPAS_DETALLE_MAX} caracteres")
+            if c.get("kind", "white") not in KINDS:
+                rep.error(donde, f"la capa «{c['id']}»: kind «{c['kind']}» no existe")
+            for x in c.keys() - {"id", "text", "detalle", "kind", "icon"}:
+                rep.aviso(donde, f"la capa «{c['id']}»: clave «{x}» desconocida")
+            nuevo_id(c["id"])
+            ids.con_tachado.add(c["id"])
+            if c.get("icon"):
+                iconos.add(c["icon"])
+            limpias.append({k2: (str(v) if k2 == "detalle" else v) for k2, v in c.items()
+                            if k2 in ("id", "text", "detalle", "kind", "icon")})
+        ids.capas[e["id"]] = [c["id"] for c in limpias]
+        out["capas"] = limpias
+        out["fs"] = fs_capas(limpias)
+        if out["fs"] < FS_MIN:
+            largo = max(limpias, key=lambda c: len(c["text"]) + len(c.get("detalle", "")))
+            rep.error(donde, f"la capa «{largo['id']}» no entra ni con letra {FS_MIN}px: acortá su texto o su detalle")
+            return None
     elif tipo == "row":
         n = len(e["items"])
         maxw = (ANCHO_MAX - 24 * (n - 1)) / max(1, n)
@@ -950,7 +1000,7 @@ def chequear_orden(et: Etiqueta, ids: Ids, mostrados: set[str], donde: str, rep:
 def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
     requisitos = {
         "strike": (ids.con_tachado, "solo celdas, encabezados, chips, renglones de lista, cajas de flujo, big, "
-                                    "partes o mensajes de una secuencia, o nodos de un árbol"),
+                                    "partes o mensajes de una secuencia, nodos de un árbol o capas"),
         "swap": (ids.con_alt, "solo chips con «alt»"),
         "type": (ids.consolas, "solo consolas"),
         "point": (ids.dialogos, "solo diálogos"),
@@ -965,6 +1015,17 @@ def chequear_accion(et: Etiqueta, ids: Ids, donde: str, rep: Reporte) -> None:
             rep.error(donde, f"send: de={de} a={a} tienen que ser dos cajas distintas de «{et.id}» ({', '.join(cajas)})")
         if len(str(et.extra.get("texto", ""))) > 12:
             rep.error(donde, "send: texto de más de 12 caracteres")
+        return
+    if et.accion == "atravesar":
+        capas = ids.capas.get(et.id)
+        if capas is None:
+            rep.error(donde, f"atravesar sobre «{et.id}»: solo elementos capas")
+            return
+        de, a = et.extra.get("de"), et.extra.get("a")
+        if de not in capas or a not in capas or de == a:
+            rep.error(donde, f"atravesar: de={de} a={a} tienen que ser dos capas distintas de «{et.id}» ({', '.join(capas)})")
+        if len(str(et.extra.get("texto", ""))) > 12:
+            rep.error(donde, "atravesar: texto de más de 12 caracteres")
         return
     if et.accion == "ruta":
         arbol = ids.arboles.get(et.id)

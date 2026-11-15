@@ -349,7 +349,26 @@ def el_arbol(e):
     svg = f'<svg class="dsvg" viewBox="0 0 {DIAG_ANCHO} {H_}" width="{DIAG_ANCHO}" height="{H_}">{aristas}{cajas}</svg>'
     return f'<div class="card diag arbol" id="{tid}">{head}<div class="dbox">{svg}</div></div>', 960, H_ + (110 if head else 40) + 30
 
-MAKERS = {"secuencia": el_secuencia, "arbol": el_arbol, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
+# ---------- capas ----------
+CAPAS_CARRIL = 160   # compile.CAPAS_CARRIL: el carril de la derecha, por donde viaja la ficha de atravesar
+
+def el_capas(e):
+    """Barras apiladas del mismo ancho, de arriba hacia abajo: el nombre a la izquierda y el detalle a la
+    derecha, más chico. Las que tienen su {show} aparecen de a una."""
+    fs = e["fs"]; h = round(fs * 1.2 + 34); ancho = DIAG_ANCHO - CAPAS_CARRIL
+    barras = ""
+    for c in e["capas"]:
+        bg, fg = KIND[c["kind"]] if c.get("kind") else (TP["capa"], TP["capaInk"])
+        ic = icon(c["icon"], fs + 4, fg) if c.get("icon") else ""
+        det = f'<span class="cdet" style="font-size:{round(fs * 0.72)}px">{H.escape(c["detalle"])}</span>' if c.get("detalle") else ""
+        barras += (f'<div class="capa" id="{c["id"]}" style="width:{ancho}px;height:{h}px;background:{bg};color:{fg};'
+                   f'border-color:{TP["capaBorde"]};font-size:{fs}px"><span class="cnom">{ic}{H.escape(c["text"])}</span>{det}{SK}</div>')
+    head = f'<div class="chead"><span>{H.escape(e["title"])}</span></div>' if e.get("title") else ""
+    alto = len(e["capas"]) * (h + 12) - 12
+    return (f'<div class="card capas" id="{e["id"]}">{head}<div class="cbox" style="width:{DIAG_ANCHO + 80}px;height:{alto + 40}px">'
+            f'{barras}</div></div>'), 960, alto + 40 + (110 if head else 40)
+
+MAKERS = {"capas": el_capas, "secuencia": el_secuencia, "arbol": el_arbol, "table": el_table, "chip": el_chip, "toast": el_toast, "dialog": el_dialog, "console": el_console,
           "list": el_list, "arrow": el_arrow, "flow": el_flow, "big": el_big, "row": el_row, "spacer": el_spacer,
           "counter": el_counter, "chart": el_chart, "chat": el_chat, "formula": el_formula, "venn": el_venn, "countdown": el_countdown}
 
@@ -392,6 +411,8 @@ def collect(e, si):
     if e["type"] == "secuencia":
         for i in range(len(e["partes"])): owner[f'{e["id"]}-p{i}'] = si
         for k in range(len(e["mensajes"])): owner[f'{e["id"]}-m{k}'] = si
+    if e["type"] == "capas":
+        for c in e["capas"]: owner[c["id"]] = si
     if e["type"] == "arbol":
         for n in e["nodos"]:
             owner[n["id"]] = si
@@ -633,6 +654,7 @@ for e in EV:
     elif e["a"] in ("good",): sfx("click.mp3", t, 0.35)
     elif e["a"] == "strike": sfx("click-soft.mp3", t, 0.45)
     elif e["a"] == "ruta": sfx("click.mp3", t, 0.35)
+    elif e["a"] == "atravesar": sfx("whoosh-short.mp3", t, 0.3)
 
 # pasos: la línea de progreso avanza en cada paso (cada good; si hay menos de dos, cada escena nueva)
 PASOS = sorted(e["t"] for e in EV if e["a"] == "good" and owner[e["id"]] < len(STATIONS) - 1)

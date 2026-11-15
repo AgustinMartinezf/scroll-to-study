@@ -130,7 +130,7 @@ function colorear(el, t, fondo, tinta, linea) {   // hl, good, bad y ruta sobre 
   }
   tl.fromTo(el, { scale: 1 }, { scale: 1.08, transformOrigin: "50% 50%", duration: 0.15, yoyo: true, repeat: 1 }, t);
 }
-const aparecido = new Set();   // nodos que una ruta ya hizo aparecer
+const aparecido = new Set();
 // apariciones compuestas
 function rodar(el, t) {
   el.querySelectorAll(".dg").forEach((d, i) => tl.fromTo(d.querySelector(".dcol"), { yPercent: 0 },
@@ -245,7 +245,7 @@ S.EV.forEach(e => {
         talk(cid, t + 0.2, x.until !== undefined ? x.until : endOfPhrase(t));
         if (!shownChars[cid]) { shownChars[cid] = 1; alive(cid, t + 0.6, D); }
       }
-      else if (cls.contains("li") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
+      else if (cls.contains("li") || cls.contains("capa") || x.from === "left") tl.fromTo(q(id), { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, t);
       else if (cls.contains("arrow")) {
         tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.1 }, t);
         tl.fromTo(q(id + "-p"), { scaleY: 0, transformOrigin: "50% 0%" }, { scaleY: 1, duration: 0.35, ease: "power2.out" }, t);
@@ -336,6 +336,26 @@ S.EV.forEach(e => {
         }
         colorear(n, tk, fondo, tinta, fondo);
       });
+      break; }
+    case "atravesar": {   // una ficha viaja de una capa a otra y resalta de a una las del medio, en el tiempo de la frase
+      const capas = [...el.querySelectorAll(".capa")], caja = el.querySelector(".cbox");
+      const i0 = capas.findIndex(c => c.id === x.de), i1 = capas.findIndex(c => c.id === x.a);
+      const centro = c => c.offsetTop + c.offsetHeight / 2;
+      const fi = document.createElement("div"); fi.className = "ficha";
+      fi.textContent = x.texto || ""; if (!x.texto) fi.classList.add("punto");
+      fi.style.background = C.ficha; fi.style.color = C.fichaInk;
+      caja.appendChild(fi); gsap.set(fi, { opacity: 0 });
+      const xc = capas[0].offsetLeft + capas[0].offsetWidth + (caja.clientWidth - capas[0].offsetLeft - capas[0].offsetWidth) / 2;
+      const dur = Math.max(0.8, Math.min(3, endOfPhrase(t) - t - 0.2)), tramo = Math.abs(i1 - i0);
+      tl.set(fi, { left: xc, top: centro(capas[i0]), xPercent: -50, yPercent: -50, y: 0, scale: 0.5 }, t);
+      tl.to(fi, { opacity: 1, scale: 1, duration: 0.15 }, t);
+      tl.to(fi, { y: centro(capas[i1]) - centro(capas[i0]), duration: dur, ease: "none" }, t + 0.1);
+      for (let k = Math.min(i0, i1) + 1; k < Math.max(i0, i1); k++) {
+        const tk = t + 0.1 + dur * Math.abs(k - i0) / tramo;
+        tl.to(capas[k], { backgroundColor: C.ruta, color: C.rutaInk, duration: 0.2 }, tk - 0.1);
+        tl.fromTo(capas[k], { scale: 1 }, { scale: 1.04, duration: 0.12, yoyo: true, repeat: 1 }, tk - 0.1);
+      }
+      tl.to(fi, { opacity: 0, scale: 0.6, duration: 0.2 }, t + 0.1 + dur);
       break; }
     case "swap": { const a = $(id + "-alt");   // el giro es un scaleY (2D): girar en X crearía una capa 3D
       tl.fromTo(a, { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.35, ease: "back.out(1.6)" }, t); break; }
