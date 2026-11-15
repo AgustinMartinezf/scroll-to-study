@@ -33,6 +33,12 @@ ENTRADAS: dict[str, list[str]] = {
     "arrow":     ["escala", "costado", "barrido"],
     "countdown": ["escala", "costado", "abajo"],
 }
+# tipos que llegaron después de la 0.7.0: se sortean al final, así no cambian las entradas ni la transición que
+# ya tenían los videos de antes. subida: cascada de abajo hacia arriba; lineas: de a una; escribir: tipeado
+ENTRADAS_0_8: dict[str, list[str]] = {
+    "capas":  ["escala", "cascada", "subida"],
+    "codigo": ["escala", "lineas", "escribir"],
+}
 TRANSICIONES = ["viaje", "corte", "paneo", "zoom"]
 # cómo se acomodan las estaciones en el mundo según el formato
 DISPOSICIONES = {"pregunta": "columna", "mito": "lados", "avsb": "partida", "pasos": "progreso",
@@ -85,12 +91,13 @@ def elegir(semilla: str, formato: str = "", forzar: dict[str, Any] | None = None
         "transicion": TRANSICIONES[r.entero(len(TRANSICIONES))],
         "disposicion": DISPOSICIONES.get(formato, DISPOSICION_SIN_FORMATO),
     }
+    out["entradas"].update({tipo: ops[r.entero(len(ops))] for tipo, ops in ENTRADAS_0_8.items()})
     extra = dict(forzar or {})
     if not forzar and os.environ.get("S2S_ANIMACION"):
         extra = json.loads(os.environ["S2S_ANIMACION"])
     if "entrada" in extra:                       # la misma entrada para todos los tipos que la tengan
         e = extra.pop("entrada")
-        out["entradas"] = {t: (e if e in ops else "escala") for t, ops in ENTRADAS.items()}
+        out["entradas"] = {t: (e if e in ops else "escala") for t, ops in {**ENTRADAS, **ENTRADAS_0_8}.items()}
     if "entradas" in extra:
         out["entradas"] = {**out["entradas"], **extra.pop("entradas")}
     out.update(extra)

@@ -156,7 +156,8 @@ const ENT = S.ENT || {};
 function partesDe(el) {   // las partes visibles de un elemento, para la cascada
   const c = el.classList;
   const sel = c.contains("tbl") ? ".row" : c.contains("lcard") ? ".li" : c.contains("crow") ? ":scope > .chip"
-    : c.contains("chart") ? ".bar" : c.contains("flow") ? ".fbox, .farrow" : c.contains("arbol") ? ".dnodo" : null;
+    : c.contains("chart") ? ".bar" : c.contains("flow") ? ".fbox, .farrow" : c.contains("arbol") ? ".dnodo"
+    : c.contains("capas") ? ".capa" : c.contains("codigo") ? ".cl" : null;
   if (!sel) return [];
   return [...el.querySelectorAll(sel)].filter(p => !HID.has(p.id) && !(p.dataset && p.dataset.padre)
     && !(p.classList.contains("farrow") && p.nextElementSibling && HID.has(p.nextElementSibling.id)));
@@ -174,9 +175,25 @@ function entrar(el, id, t, ent) {
       ease: ent === "letras" ? "steps(" + n + ")" : "power2.inOut" }, t);
     tl.set(sel, { clipPath: "none" }, t + dur + 0.01);   // sin recorte al final: vuelve la sombra de la tarjeta
   }
-  else if (ent === "cascada") {
+  else if (ent === "cascada" || ent === "subida") {   // subida: de abajo hacia arriba (capas)
     tl.fromTo(sel, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, t);
-    partesDe(el).forEach((p, k) => tl.fromTo(p, { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, t + 0.15 + k * 0.09));
+    const partes = ent === "subida" ? partesDe(el).reverse() : partesDe(el), dy = ent === "subida" ? -28 : 28;
+    partes.forEach((p, k) => tl.fromTo(p, { opacity: 0, y: dy }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, t + 0.15 + k * 0.09));
+  }
+  else if (ent === "lineas") {        // código: aparece línea por línea
+    tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.25 }, t);
+    partesDe(el).forEach((p, k) => tl.fromTo(p, { opacity: 0, x: -36 }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out" }, t + 0.1 + k * 0.07));
+  }
+  else if (ent === "escribir") {      // código: cada línea se escribe, una después de otra
+    tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.2 }, t);
+    const partes = partesDe(el), total = Math.min(1.6, 0.12 * partes.length + 0.2);
+    let tt = t + 0.15;
+    partes.forEach(p => {
+      const n = Math.max(1, Math.min(34, (p.querySelector(".ctx") || p).textContent.length)), d = total / partes.length;
+      tl.fromTo(p, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: d, ease: "steps(" + n + ")" }, tt);
+      tl.set(p, { clipPath: "none" }, tt + d + 0.01);
+      tt += d;
+    });
   }
 }
 function cuentaRegresiva(el, t) {
