@@ -4,12 +4,14 @@
    "fuentes": ["A1"],
    "comprobar": [],
    "elementos": [
+    {"type": "capas", "id": "pila", "title": "TCP/IP", "capas": [{"id": "capp", "text": "application", "detalle": "HTTP, DNS"},
+      {"id": "ctr", "text": "transport", "detalle": "TCP, UDP"}, {"id": "cint", "text": "internet", "detalle": "IP"}]},
     {"type": "chip", "id": "tres", "text": "3 messages before the first byte", "kind": "blue"},
     {"type": "chip", "id": "q", "text": "Why are two not enough?", "kind": "warn", "icon": "question"},
     {"type": "countdown", "id": "cd", "seconds": 3}
    ],
    "frases": [
-    "Before sending a single byte of data, TCP exchanges {show tres}[+three] messages.",
+    "In the {show pila}{hl ctr +0.3}transport layer, before sending a single byte, TCP exchanges {show tres}[+three] messages.",
     "Client and server have to agree on something first.",
     "Think about it: why are {show q}just two messages not {show cd}enough?"
    ]

@@ -4,12 +4,14 @@
    "fuentes": ["A1"],
    "comprobar": [],
    "elementos": [
+    {"type": "capas", "id": "pila", "title": "TCP/IP", "capas": [{"id": "capp", "text": "aplicación", "detalle": "HTTP, DNS"},
+      {"id": "ctr", "text": "transporte", "detalle": "TCP, UDP"}, {"id": "cint", "text": "internet", "detalle": "IP"}]},
     {"type": "chip", "id": "tres", "text": "3 mensajes antes del primer dato", "kind": "blue"},
     {"type": "chip", "id": "q", "text": "¿Por qué no alcanzan dos?", "kind": "warn", "icon": "question"},
     {"type": "countdown", "id": "cd", "seconds": 3}
    ],
    "frases": [
-    "Antes de mandar un solo dato, TCP intercambia {show tres}[+tres] mensajes.",
+    "En la capa de {show pila}{hl ctr +0.3}transporte, antes de mandar un solo dato, TCP intercambia {show tres}[+tres] mensajes.",
     "Cliente y servidor tienen que ponerse de acuerdo en algo.",
     "Pensalo: ¿por qué no alcanzan {show q}solo dos {show cd}mensajes?"
    ]
