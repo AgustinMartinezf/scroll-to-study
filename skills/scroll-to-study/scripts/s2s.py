@@ -15,6 +15,7 @@ comprobar con código y fabrica los videos:
   python3 s2s.py video     -t T --tema t01      # voz + animación -> T/videos/t01.html
   python3 s2s.py videos    -t T [--titulo ...]  # todos los guiones listos + T/videos/index.html
   python3 s2s.py estado    -t T
+  python3 s2s.py variedad  -t T [--titulo ...]  # por video: formato, entradas, transición y disposición
   python3 s2s.py mp4       -t T [--tema t01] [--alto 1280]   # opcional: T/videos/*.html -> T/mp4/*.mp4
   python3 s2s.py paquete   -t T [--titulo ...]  # T/videos/*.html -> T/<titulo>.s2s.json, para la app del teléfono
   python3 s2s.py diagnostico                    # qué está instalado y qué falta, una línea por cosa
@@ -27,6 +28,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -39,9 +41,10 @@ from typing import Any
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 
+import animacion                                    # noqa: E402
 import fuentes                                      # noqa: E402
 from config import CFG, DATOS                       # noqa: E402
-from etapas import (IDIOMAS, MODOS, aplicar_respaldo, avisos_iconos, avisos_variedad, escenas, guiones_validados, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
+from etapas import (IDIOMAS, MODOS, _afirmaciones_del_tema, aplicar_respaldo, elegir_formato, avisos_iconos, avisos_variedad, escenas, guiones_validados, escribir, escribir_salidas, filtrar_temas, idioma_de,  # noqa: E402
                     huella, leer, modo_de, preguntas_listas, textos,
                     pedido_guion, pedido_preguntas, pedido_respaldo, validar_guion, validar_preguntas, pendientes_respaldo, reaplicar_respaldo,
                     resumen_inventario, separar_errores)
@@ -398,27 +401,54 @@ def estilo_de(t: Path, pedido: str | None) -> str:
     return leer(o).get("estilo", "cuaderno") if o.exists() else "cuaderno"
 
 
-def hacer_video(t: Path, tema_id: str, voz: str | None, estilo: str | None = None) -> Path:
+def titulo_lista(t: Path, pedido: str = "") -> str:
+    """El título de la lista: el que se pide, o con el que ya se armó, o el de siempre según el idioma."""
+    import paquete
+    return pedido or paquete.titulo_de_lista(t) or ("Para estudiar" if idioma_de(t) == "es" else "Study playlist")
+
+
+def semilla_y_formato(t: Path, tema_id: str, titulo: str) -> tuple[str, str]:
+    """Lo que decide la animación de un video: la semilla (id del tema y título de la lista) y el formato."""
+    tema = _tema(t, tema_id)
+    inv = _inventario(t)
+    formato = (elegir_formato(tema, _afirmaciones_del_tema(inv, tema), modo_de(t)) if inv
+               else tema.get("formato", ""))
+    return animacion.texto_semilla(tema_id, titulo), formato
+
+
+def animacion_de(t: Path, tema_id: str, titulo: str) -> dict[str, Any]:
+    """Formato, entradas por tipo, transición y disposición del video de un tema (lo mismo que hace engine.py)."""
+    semilla, formato = semilla_y_formato(t, tema_id, titulo)
+    spec = leer(t / tema_id / "spec.json")
+    tipos = [e["type"] for st in spec["STATIONS"] for e in st] + ["list", "dialog", "chip"]
+    return animacion.resumen(animacion.elegir(semilla, formato), tipos)
+
+
+def hacer_video(t: Path, tema_id: str, voz: str | None, estilo: str | None = None, titulo: str = "") -> Path:
     import reproductor
     carpeta = t / tema_id
     if not (carpeta / "spec.json").exists():
         raise SystemExit(f"{tema_id}: no hay spec.json; primero `s2s.py guion -t {t} --tema {tema_id}` sin errores")
     inicio = time.time()
     subprocess.run([sys.executable, str(AQUI / "voice.py"), str(carpeta), voz or textos(t)["voz"]], check=True)
+    # la animación varía de un video a otro, pero el mismo tema da siempre el mismo video
+    semilla, formato = semilla_y_formato(t, tema_id, titulo_lista(t, titulo))
     subprocess.run([sys.executable, str(AQUI / "engine.py"), str(carpeta), estilo_de(t, estilo)], check=True,
-                   stdout=subprocess.DEVNULL)
+                   stdout=subprocess.DEVNULL, env={**os.environ, "S2S_SEMILLA": semilla, "S2S_FORMATO": formato})
     for av in leer(carpeta / "avisos.json") if (carpeta / "avisos.json").exists() else []:
         print("AVISO     ", av["msg"])
     tema = _tema(t, tema_id)
     destino = reproductor.construir(carpeta, t / "videos" / f"{tema_id}.html", tema["titulo"])
     dur = leer(carpeta / "timing.json")["duration"]
-    registrar(t, "video", tema=tema_id, duracion=dur, segundos=round(time.time() - inicio, 1))
+    anim = leer(carpeta / "animacion.json") if (carpeta / "animacion.json").exists() else {}
+    registrar(t, "video", tema=tema_id, duracion=dur, segundos=round(time.time() - inicio, 1),
+              animacion={k: anim.get(k) for k in ("formato", "entradas", "transicion", "disposicion")})
     print(f"{destino} ({dur:.0f} s de video, {destino.stat().st_size // 1024} KB)")
     return destino
 
 
 def cmd_video(a: argparse.Namespace) -> int:
-    hacer_video(a.trabajo, a.tema, a.voz, a.estilo)
+    hacer_video(a.trabajo, a.tema, a.voz, a.estilo, a.titulo)
     return 0
 
 
@@ -432,7 +462,7 @@ def cmd_videos(a: argparse.Namespace) -> int:
             print(f"  {x['id']}: sin guion validado, lo salteo")
             continue
         if a.todo or not html.exists() or html.stat().st_mtime < (c / "spec.json").stat().st_mtime:
-            hacer_video(t, x["id"], a.voz, a.estilo)
+            hacer_video(t, x["id"], a.voz, a.estilo, a.titulo)
         preguntas, motivo = preguntas_listas(c, inv)
         if motivo:
             faltan[x["id"]] = motivo
@@ -441,9 +471,29 @@ def cmd_videos(a: argparse.Namespace) -> int:
     if not lista:
         print("no hay videos para armar"); return 1
     avisar_sin_preguntas(t, faltan)
-    titulo = a.titulo or ("Para estudiar" if idioma_de(t) == "es" else "Study playlist")
+    titulo = titulo_lista(t, a.titulo)
     idx = reproductor.indice(t / "videos" / "index.html", titulo, lista, idioma_de(t))
     print(f"{len(lista)} videos → abrí {idx}")
+    return 0
+
+
+def cmd_variedad(a: argparse.Namespace) -> int:
+    """Cuánto varían los videos de la lista: formato, entradas por tipo, transición y disposición."""
+    t = a.trabajo
+    titulo = titulo_lista(t, a.titulo)
+    detalle: dict[str, Any] = {}
+    for x in leer(t / "temas.json")["temas"]:
+        if not (t / x["id"] / "spec.json").exists():
+            continue
+        r = detalle[x["id"]] = animacion_de(t, x["id"], titulo)
+        entradas = ", ".join(f"{tipo}={e}" for tipo, e in r["entradas"].items())
+        print(f"  {x['id']} {r['formato'] or '-':9} transición {r['transicion']:6} disposición {r['disposicion']:9} "
+              f"entradas: {entradas}")
+    if not detalle:
+        print("no hay guiones validados"); return 1
+    distintas = len({animacion.combinacion(r) for r in detalle.values()})
+    print(f"{len(detalle)} videos, {distintas} combinaciones distintas")
+    registrar(t, "variedad", titulo=titulo, videos=len(detalle), combinaciones=distintas, detalle=detalle)
     return 0
 
 
@@ -541,13 +591,13 @@ def cmd_diagnostico(a: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("etapa", choices=["instalar", "corpus", "verificar", "respaldo", "temas", "pedido", "guion", "preguntas",
-                                      "video", "videos", "estado", "mp4", "paquete", "diagnostico"])
+                                      "video", "videos", "variedad", "estado", "mp4", "paquete", "diagnostico"])
     ap.add_argument("-t", "--trabajo", type=Path)
     ap.add_argument("--repo", type=Path)
     ap.add_argument("--doc", type=Path, action="append", default=[])
     ap.add_argument("--tema")
     ap.add_argument("--voz", help="voz de Piper (por defecto davefx)")
-    ap.add_argument("--titulo", default="", help="videos, paquete: nombre del proyecto o la materia")
+    ap.add_argument("--titulo", default="", help="video, videos, variedad, paquete: nombre del proyecto o la materia")
     ap.add_argument("--estilo", choices=sorted(p.stem for p in (AQUI / "temas").glob("*.json")),
                     help="cómo se ve el video (por defecto, el que se eligió en corpus, o cuaderno)")
     ap.add_argument("--idioma", choices=sorted(IDIOMAS), default="es", help="corpus: idioma de los videos")
