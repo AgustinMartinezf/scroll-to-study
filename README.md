@@ -31,6 +31,9 @@ your material ──► inventory of statements ──► checked by code (verba
   font sizes, pauses, pronunciation, and syncing the animation with the voice.
 - Each video gets a format that fits its topic: question and answer (with a countdown so you try to
   recall first), myth vs fact, A versus B, step by step, or the story of a decision. You can force one.
+- Each video varies its animation: how each element enters, how the camera moves between scenes and how
+  the scenes are laid out (by format) change from one video to the next, and the same topic always gives
+  the same video.
 - The voice is [Piper](https://github.com/OHF-Voice/piper1-gpl) and runs locally. The time of each
   word comes from the voice model itself, so the animation lands on the word that names it.
 - Each video is a single `.html` of about 1 MB with no dependencies: it opens in the browser on your
