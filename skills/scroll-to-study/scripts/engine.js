@@ -14,12 +14,16 @@ document.querySelectorAll(".fbox").forEach(b => { if (!P0[b.id]) P0[b.id] = posO
 const HID = new Set(S.hidden);
 const vis = S.stEls.map(ids => new Set(ids.filter(id => !HID.has(id))));
 const topOwner = {}; S.stEls.forEach((ids, si) => ids.forEach(id => topOwner[id] = si));
-function frameOf(set) {
+const CERCA = new Set(S.CERCA || []);
+// el cuadro que muestra un conjunto de elementos. En la escena «cerca» (la cuenta regresiva de una pregunta)
+// la cámara se acerca más, sin pasar de las zonas seguras (920 x 1040 px de contenido)
+function frameOf(set, si) {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   set.forEach(id => { const p = P0[id]; if (!p) return; x0 = Math.min(x0, p.x - p.w / 2); x1 = Math.max(x1, p.x + p.w / 2); y0 = Math.min(y0, p.y - p.h / 2); y1 = Math.max(y1, p.y + p.h / 2); });
   if (x0 > x1) return null;
   const w = Math.max(x1 - x0, 560), h = Math.max(y1 - y0, 360);
-  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, s: Math.max(0.55, Math.min(1.45, 1000 / h, 860 / w)) };
+  const s = Math.max(0.55, Math.min(1.45, 1000 / h, 860 / w));
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, s: CERCA.has(si) ? Math.max(s, Math.min(1.6, s * 1.2, 1040 / h, 920 / w)) : s };
 }
 function camTo(c, t, dur, ease) {
   tl.to(W, { x: CX - c.x * c.s, y: CY - c.y * c.s, scale: c.s, duration: dur, ease }, t);
@@ -28,26 +32,53 @@ function camTo(c, t, dur, ease) {
 const trav = Object.entries(S.travel).map(([si, t]) => [+si, t]).sort((a, b) => a[1] - b[1]);
 const stationAt = t => { let s = 0; trav.forEach(([si, tt]) => { if (t >= tt) s = si; }); return s; };
 const visAt = (si, t) => { const v = new Set(vis[si]); S.EV.forEach(e => { if (topOwner[e.id] !== si || e.t > t) return; if (e.a === "show") v.add(e.id); if (e.a === "hide") v.delete(e.id); }); return v; };
-let lastEnd = 0, cur = frameOf(visAt(0, 0.8)) || { x: 540, y: 600, s: 1 };
+let lastEnd = 0, cur = frameOf(visAt(0, 0.8), 0) || { x: 540, y: 600, s: 1 };
 gsap.set(W, { x: CX - cur.x * cur.s * 1.35, y: CY - cur.y * cur.s * 1.35, scale: cur.s * 1.35 });
 camTo(cur, 0, 0.75, "expo.out"); lastEnd = 0.75;
+// transiciones entre escenas (una por video, la elige la semilla; el mito pasa de costado de la idea equivocada a
+// la correcta). Todas terminan antes de 1,05 s con la cámara en el mismo cuadro. Devuelven cuándo terminan.
+function transicion(estilo, si, t, a, b) {
+  if (estilo === "corte") {          // fundido corto, sin viaje
+    tl.to(W, { opacity: 0, duration: 0.15, ease: "power1.in" }, t + 0.1);
+    camTo(b, t + 0.26, 0.01, "none");
+    tl.to(W, { opacity: 1, duration: 0.25, ease: "power1.out" }, t + 0.28);
+    return t + 0.55;
+  }
+  if (estilo === "paneo") {          // la cámara se desliza a la escena siguiente sin alejarse
+    camTo({ x: b.x, y: b.y, s: Math.min(a.s, b.s) }, t, 0.7, "power2.inOut");
+    camTo(b, t + 0.7, 0.3, "power2.out");
+    return t + 1.0;
+  }
+  if (estilo === "zoom") {           // se mete en la escena actual y sale de cerca en la siguiente
+    camTo({ x: a.x, y: a.y, s: a.s * 1.7 }, t, 0.3, "power2.in");
+    tl.to(W, { opacity: 0, duration: 0.12, ease: "power1.in" }, t + 0.18);
+    camTo({ x: b.x, y: b.y, s: b.s * 1.6 }, t + 0.31, 0.01, "none");
+    tl.to(W, { opacity: 1, duration: 0.2, ease: "power1.out" }, t + 0.33);
+    camTo(b, t + 0.33, 0.6, "power3.out");
+    return t + 0.95;
+  }
+  // viaje: se aleja, cruza dibujando el camino y se acerca a la escena siguiente
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.min(a.s, b.s) * 0.55 };
+  camTo(mid, t, 0.45, "power2.in"); camTo(b, t + 0.45, 0.6, "power3.out");
+  // el viaje se "barre" bajando la opacidad del mundo, no con un filtro: en iOS un filter animado sobre
+  // un contenedor tan grande reserva capas enormes y el proceso del video se cae a mitad del video
+  tl.to(W, { opacity: 0.45, duration: 0.3, ease: "power2.in" }, t + 0.2);
+  tl.to(W, { opacity: 1, duration: 0.35, ease: "power2.out" }, t + 0.55);
+  const p = $("pth" + (si - 1));
+  if (p) {
+    const L = p.getTotalLength(); gsap.set(p, { strokeDasharray: L, strokeDashoffset: L });
+    tl.to(p, { strokeDashoffset: 0, duration: 0.85, ease: "power2.inOut" }, t + 0.1);
+  }
+  return t + 1.05;
+}
 const camEvents = S.EV.filter(e => topOwner[e.id] !== undefined && (e.a === "show" || e.a === "hide"));
 camEvents.concat(trav.map(([si, t]) => ({ t, travel: si }))).sort((a, b) => a.t - b.t).forEach(e => {
   if (e.travel !== undefined) {
-    const si = e.travel, t = e.t, a = cur, b = frameOf(visAt(si, t + 1.6)) || cur;
-    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.min(a.s, b.s) * 0.55 };
-    camTo(mid, t, 0.45, "power2.in"); camTo(b, t + 0.45, 0.6, "power3.out");
-    // el viaje se "barre" bajando la opacidad del mundo, no con un filtro: en iOS un filter animado sobre
-    // un contenedor tan grande reserva capas enormes y el proceso del video se cae a mitad del video
-    tl.to(W, { opacity: 0.45, duration: 0.3, ease: "power2.in" }, t + 0.2);
-    tl.to(W, { opacity: 1, duration: 0.35, ease: "power2.out" }, t + 0.55);
-    const p = $("pth" + (si - 1)); const L = p.getTotalLength();
-    gsap.set(p, { strokeDasharray: L, strokeDashoffset: L });
-    tl.to(p, { strokeDashoffset: 0, duration: 0.85, ease: "power2.inOut" }, t + 0.1);
-    cur = b; lastEnd = t + 1.05; return;
+    const si = e.travel, t = e.t, a = cur, b = frameOf(visAt(si, t + 1.6), si) || cur;
+    lastEnd = transicion(S.TRANS[si] || "viaje", si, t, a, b); cur = b; return;
   }
   const si = topOwner[e.id]; if (stationAt(e.t + 0.01) !== si) return;
-  const f = frameOf(visAt(si, e.t + 0.6)); if (!f) return;
+  const f = frameOf(visAt(si, e.t + 0.6), si); if (!f) return;
   if (Math.abs(f.s - cur.s) / cur.s < 0.05 && Math.hypot(f.x - cur.x, f.y - cur.y) < 50) return;
   const st = Math.max(e.t - 0.15, lastEnd); camTo(f, st, 0.55, "power2.inOut"); lastEnd = st + 0.55; cur = f;
 });
@@ -113,6 +144,57 @@ function escribir(msg, t) {
   tl.to(msg.querySelector(".dots"), { opacity: 0, duration: 0.1 }, t + 0.45);
   tl.to(msg.querySelector(".mtxt"), { opacity: 1, duration: 0.15 }, t + 0.5);
 }
+// entradas variadas (animacion.py elige una por tipo de elemento y por video). Todas empiezan en la palabra
+// del {show} y terminan en el mismo cuadro que la entrada de siempre.
+const LADO = S.LADO === "izquierda" ? -1 : 1;
+const ENT = S.ENT || {};
+function partesDe(el) {   // las partes visibles de un elemento, para la cascada
+  const c = el.classList;
+  const sel = c.contains("tbl") ? ".row" : c.contains("lcard") ? ".li" : c.contains("crow") ? ":scope > .chip"
+    : c.contains("chart") ? ".bar" : c.contains("flow") ? ".fbox, .farrow" : c.contains("arbol") ? ".dnodo" : null;
+  if (!sel) return [];
+  return [...el.querySelectorAll(sel)].filter(p => !HID.has(p.id) && !(p.dataset && p.dataset.padre)
+    && !(p.classList.contains("farrow") && p.nextElementSibling && HID.has(p.nextElementSibling.id)));
+}
+const letrasDe = el => Math.max(4, Math.min(40, (el.textContent || "").trim().length));
+function entrar(el, id, t, ent) {
+  const sel = q(id);
+  if (ent === "costado") tl.fromTo(sel, { opacity: 0, x: 170 * LADO }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, t);
+  else if (ent === "abajo") tl.fromTo(sel, { opacity: 0, y: 150 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, t);
+  else if (ent === "barrido" || ent === "letras") {
+    // se descubre de izquierda a derecha recortando con clip-path inset(); letras: a saltos, como si se escribiera
+    const n = letrasDe(el), dur = ent === "letras" ? Math.min(0.9, 0.1 + 0.035 * n) : 0.55;
+    tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.01 }, t);
+    tl.fromTo(sel, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: dur,
+      ease: ent === "letras" ? "steps(" + n + ")" : "power2.inOut" }, t);
+    tl.set(sel, { clipPath: "none" }, t + dur + 0.01);   // sin recorte al final: vuelve la sombra de la tarjeta
+  }
+  else if (ent === "cascada") {
+    tl.fromTo(sel, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, t);
+    partesDe(el).forEach((p, k) => tl.fromTo(p, { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, t + 0.15 + k * 0.09));
+  }
+}
+function cuentaRegresiva(el, t) {
+  const seg = +el.dataset.s, arco = el.querySelector(".cdp"), L = 2 * Math.PI * 88;
+  tl.fromTo(arco, { strokeDasharray: L, strokeDashoffset: 0 }, { strokeDashoffset: L, duration: seg, ease: "none" }, t + 0.2);
+  [...el.querySelectorAll(".cdn")].forEach((n, k) => {
+    tl.fromTo(n, { opacity: 0, scale: 1.6 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power3.out" }, t + 0.2 + k);
+    tl.to(n, { opacity: 0, duration: 0.15 }, t + 0.2 + k + 0.85);
+  });
+}
+// lo que cada tipo hace además de entrar, sea cual sea la entrada
+function despuesDeEntrar(el, id, t, x) {
+  const c = el.classList;
+  if (c.contains("chart")) el.querySelectorAll(".bar").forEach((b, i) => { if (!HID.has(b.id)) crecer(b, t + 0.35 + i * 0.15); });
+  if (c.contains("chat")) { let k = 0; el.querySelectorAll(".msg").forEach(m => { if (!HID.has(m.id)) escribir(m, t + 0.4 + 0.9 * k++); }); }
+  if (c.contains("counter")) rodar(el, t);
+  if (c.contains("countdown")) cuentaRegresiva(el, t);
+  if (c.contains("dialog")) {
+    const cid = id + "-c";
+    talk(cid, t + 0.2, x.until !== undefined ? x.until : endOfPhrase(t));
+    if (!shownChars[cid]) { shownChars[cid] = 1; alive(cid, t + 0.6, D); }
+  }
+}
 // personajes vivos
 function alive(id, from, to) {
   const n = Math.max(1, Math.floor((to - from) / 1.6));
@@ -152,7 +234,8 @@ S.EV.forEach(e => {
   const cls = el.classList;
   switch (e.a) {
     case "show": {
-      if (cls.contains("row")) tl.fromTo(q(id), { opacity: 0, y: -110 }, { opacity: 1, y: 0, duration: 0.45, ease: "back.out(1.6)" }, t);
+      if (ENT[id]) { entrar(el, id, t, ENT[id]); despuesDeEntrar(el, id, t, x); }
+      else if (cls.contains("row")) tl.fromTo(q(id), { opacity: 0, y: -110 }, { opacity: 1, y: 0, duration: 0.45, ease: "back.out(1.6)" }, t);
       else if (cls.contains("dialog")) {
         const cid = id + "-c";
         tl.fromTo(q(id + "-cw"), { x: -220 }, { x: 0, duration: 0.55, ease: "power3.out" }, t);
@@ -171,13 +254,8 @@ S.EV.forEach(e => {
       else if (cls.contains("toast")) tl.fromTo(q(id), { opacity: 0, y: -70, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.5)" }, t);
       else if (cls.contains("vreg")) region(id, t, C.good, 0.55);
       else if (cls.contains("countdown")) {
-        const seg = +el.dataset.s, arco = el.querySelector(".cdp"), L = 2 * Math.PI * 88;
         tl.fromTo(q(id), { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, t);
-        tl.fromTo(arco, { strokeDasharray: L, strokeDashoffset: 0 }, { strokeDashoffset: L, duration: seg, ease: "none" }, t + 0.2);
-        [...el.querySelectorAll(".cdn")].forEach((n, k) => {
-          tl.fromTo(n, { opacity: 0, scale: 1.6 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power3.out" }, t + 0.2 + k);
-          tl.to(n, { opacity: 0, duration: 0.15 }, t + 0.2 + k + 0.85);
-        });
+        cuentaRegresiva(el, t);
       }
       else if (cls.contains("counter")) { tl.fromTo(q(id), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.7)" }, t); rodar(el, t); }
       else if (cls.contains("bar")) { tl.fromTo(q(id), { opacity: 0 }, { opacity: 1, duration: 0.2 }, t); crecer(el, t); }
@@ -272,6 +350,12 @@ S.EV.forEach(e => {
     case "focus": { const p = P0[id] || posOf(id); const s = x.s || 1.15; camTo({ x: p.x, y: p.y + (x.dy || 0), s }, t, x.dur || 0.6, "power2.inOut"); break; }
   }
 });
+// pasos: la línea de progreso fija avanza en cada paso
+const prog = $("progreso-l");
+if (prog && S.PASOS.length) {
+  gsap.set(prog, { scaleY: 0 });
+  S.PASOS.forEach((tp, k) => tl.fromTo(prog, { scaleY: k / S.PASOS.length }, { scaleY: (k + 1) / S.PASOS.length, duration: 0.4, ease: "power2.out" }, tp));
+}
 // subtítulos
 document.querySelectorAll(".capg .w").forEach(el => {
   const t = parseFloat(el.dataset.t), kg = el.classList.contains("kg"), kb = el.classList.contains("kb");

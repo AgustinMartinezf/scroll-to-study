@@ -215,3 +215,34 @@ def test_el_registro_guarda_los_elementos_de_cada_guion_validado(tmp_path, capsy
     correr_guion(t, "t01", guion_redes(None), capsys)
     guiones = [json.loads(l) for l in (t / "registro.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [g.get("elementos") for g in guiones if g["cmd"] == "guion"] == [None, [["flow", "send"], ["big"]]]
+
+
+# ---------------------------------------------------------------------------
+# s2s.py variedad: cuánto varía la animación de los videos de la lista
+# ---------------------------------------------------------------------------
+
+def test_variedad_muestra_la_animacion_de_cada_video_y_la_registra(tmp_path, capsys):
+    import animacion
+    import s2s
+    t = trabajo(tmp_path)
+    for tema in ("t01", "t02", "t03"):
+        assert correr_guion(t, tema, guion_redes(None), capsys)[0] == 0
+    capsys.readouterr()
+    assert s2s.main(["variedad", "-t", str(t), "--titulo", "Redes"]) == 0
+    out = capsys.readouterr().out
+    lineas = [l for l in out.splitlines() if l.startswith("  t0")]
+    assert [l.split()[0] for l in lineas] == ["t01", "t02", "t03"]
+    for l in lineas:
+        assert "transición" in l and "disposición" in l and "entradas:" in l and "flow=" in l
+    # lo mismo que elige el motor con la semilla del tema y el título de la lista
+    anim = animacion.elegir(animacion.texto_semilla("t02", "Redes"), lineas[1].split()[1])
+    assert f"transición {anim['transicion']}" in lineas[1] and f"flow={anim['entradas']['flow']}" in lineas[1]
+    distintas = int(re.search(r"3 videos, (\d+) combinaciones distintas", out)[1])
+    assert 1 <= distintas <= 3
+    reg = [json.loads(l) for l in (t / "registro.jsonl").read_text(encoding="utf-8").splitlines()]
+    v = [r for r in reg if r["cmd"] == "variedad"][-1]
+    assert v["videos"] == 3 and v["combinaciones"] == distintas and v["titulo"] == "Redes"
+    assert set(v["detalle"]) == {"t01", "t02", "t03"} and v["detalle"]["t02"]["transicion"] == anim["transicion"]
+    # el mismo comando dos veces da lo mismo
+    assert s2s.main(["variedad", "-t", str(t), "--titulo", "Redes"]) == 0
+    assert capsys.readouterr().out == out

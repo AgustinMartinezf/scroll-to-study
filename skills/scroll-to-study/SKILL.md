@@ -177,6 +177,9 @@ video. If a warning says a file was not validated or has errors, run `S2S pregun
 it, and run `S2S videos` again (it does not redo the videos, only the playlist). Each video is a single `.html` of about 1 MB that works offline:
 it can be opened on the computer or copied to a phone. To redo one after changing its script:
 `S2S video -t T --tema t01`. `S2S estado -t T` shows what is missing.
+The engine animates each video differently on its own (how elements enter, how the camera moves between
+scenes and how the scenes are laid out, by format); the script does not choose it. The same topic always
+gives the same video. `S2S variedad -t T` lists, per video, the format, entrances, transition and layout.
 If `video` warns that something appears right before the camera changes scene, move that `{show}`
 earlier in the script or add a short sentence after it, validate again and redo that video.
 

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-14
+
+### Changed
+
+- Videos no longer all look the same. The engine decides the animation by itself (the script format and
+  the prompts do not change), from a stable seed made of the topic id and the playlist title (FNV-1a and
+  mulberry32, never `Math.random`): the same topic gives the same video, byte for byte.
+  - Each element type has 3 to 5 entrances: the old pop, slide in from a side or from below, a wipe
+    with `clip-path: inset()`, typed letter by letter (chip, big and toast) and a cascade of its parts
+    (table rows, list items, the chips of a row, chart bars, flow boxes, tree nodes). Within a video a
+    type always enters the same way. Entrances start on the word of their `{show}` and end in the same
+    frame as before.
+  - Scene transitions: the old trip with a drawn path, a quick cut, a side pan or a fast zoom into the
+    next scene; one per video.
+  - Each format has its own staging: question scenes in a column with the countdown scene closer; myth
+    with the wrong idea on the left and the right one on its right, with a side pan between them; A
+    versus B as a split screen (side A on the left, side B on the right) for each type with an even
+    number of elements in a block, without shrinking text below 28 px; steps in a column with a fixed
+    progress line that advances on every step; story as 2x2 panels visited in order. Scenes in a column
+    are far enough apart that the next one stays out of frame.
+  - Everything is still animated only with opacity, 2D scale, position, 2D rotation, `strokeDashoffset`
+    and `clip-path: inset()`, with no 3D layers (for iOS).
+
+### Added
+
+- `s2s.py variedad -t T` shows, per video, the format, the entrance of each element type, the transition
+  and the layout, and how many different combinations the playlist has; it is recorded in
+  `registro.jsonl`, and so is the animation of each video that `s2s.py video` makes.
+- `s2s.py video` and `videos` keep the playlist title of `T/videos/index.html` when `--titulo` is not
+  given (it is part of the seed).
+
 ## [0.6.0] - 2026-11-14
 
 ### Added
@@ -195,7 +226,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topics, scripts per topic with a validator, local voice with Piper, and one self-contained `.html`
   per video plus a playlist.
 
-[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/AgustinMartinezf/scroll-to-study/compare/v0.4.1...v0.4.2
