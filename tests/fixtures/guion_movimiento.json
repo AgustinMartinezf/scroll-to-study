@@ -1,0 +1,39 @@
+{
+ "bloques": [
+  {"fuentes": ["A1"], "comprobar": [], "elementos": [
+    {"type": "chip", "id": "c1", "text": "una entrada por tipo", "kind": "blue", "icon": "lightning"},
+    {"type": "big", "id": "bg", "text": "3 de 5"},
+    {"type": "toast", "id": "ts", "text": "error: nada se mueve", "kind": "bad"}
+   ],
+   "frases": ["Cada video {show c1}entra distinto, pero siempre en la misma palabra.",
+              "Un número grande {show bg}aparece de golpe y se queda quieto un rato.",
+              "Y un error de consola {show ts}salta desde arriba cuando la voz lo nombra.",
+              "Todo eso pasa en la primera escena del video."]},
+  {"fuentes": ["A1"], "comprobar": [], "elementos": [
+    {"type": "table", "id": "tb", "title": "tiempos", "cols": ["paso", "segundos"], "rows": [["voz", "12"], ["motor", "3"], ["video", "1"]]},
+    {"type": "list", "id": "ls", "title": "orden", "items": [["l1", "primero la voz"], ["l2", "después el motor"]]}
+   ],
+   "frases": ["La tabla {show tb}tiene filas que pueden entrar de a una.",
+              "La lista de abajo {show ls}también tiene renglones que caen en cascada.",
+              "Las dos quedan en su lugar hasta que la cámara se va.",
+              "Después viene la tercera escena del video de prueba."]},
+  {"fuentes": ["A1"], "comprobar": [], "elementos": [
+    {"type": "row", "id": "rw", "items": [{"id": "ra", "text": "lado A", "kind": "blue"}, {"id": "rb", "text": "lado B", "kind": "purple"}]},
+    {"type": "chart", "id": "ch", "title": "barras", "bars": [["uno", 3], ["dos", 5], ["tres", 2]]},
+    {"type": "flow", "id": "fl", "items": [{"id": "f1", "text": "entra"}, {"id": "f2", "text": "sale", "kind": "good"}]}
+   ],
+   "frases": ["Una fila de chips {show rw}aparece con sus dos lados.",
+              "El gráfico {show ch}crece barra por barra hasta su valor.",
+              "Y el flujo {show fl}muestra dos cajas unidas por una flecha.",
+              "Ninguna de las tres cambia el reloj del video."]},
+  {"fuentes": ["A1"], "comprobar": [], "elementos": [
+    {"type": "arbol", "id": "ar", "nodos": [{"id": "na", "text": "raíz"}, {"id": "nb", "text": "rama", "padre": "na"}, {"id": "nc", "text": "hoja", "padre": "na"}]},
+    {"type": "counter", "id": "n", "value": "42", "label": "segundos"}
+   ],
+   "frases": ["El árbol {show ar}empieza por su raíz, en el centro.",
+              "Después {show nb}aparece la rama y {show nc}aparece la hoja.",
+              "Y el contador {show n}{boom n +0.6}rueda hasta su número final."]}
+ ],
+ "final": {"frases": ["Para acordarte: {show fl1}cada video entra distinto.", "{show fnext}Mañana: la cámara."],
+  "lineas": ["cada video <b>entra distinto</b>"], "mañana": "la cámara"}
+}
